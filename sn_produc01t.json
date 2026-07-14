@@ -1,0 +1,46 @@
+[
+  {
+    "id": "1",
+    "name": "Canon EOS R50",
+    "stock": 12,
+    "stock_text": "12 units",
+    "category": "Mirrorless Camera",
+    "location_count": 2,
+    "location_text": "Shelf A1",
+    "badge_status": "Available",
+    "image_url": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500"
+  },
+  {
+    "id": "2",
+    "name": "Sony Alpha A6700",
+    "stock": 4,
+    "stock_text": "4 units",
+    "category": "Mirrorless Camera",
+    "location_count": 1,
+    "location_text": "Shelf A2",
+    "badge_status": "Low in stock",
+    "image_url": "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=500"
+  },
+  {
+    "id": "3",
+    "name": "Nikon Z6 II",
+    "stock": 8,
+    "stock_text": "8 units",
+    "category": "Mirrorless Camera",
+    "location_count": 2,
+    "location_text": "Shelf B1",
+    "badge_status": "Available",
+    "image_url": "https://images.unsplash.com/photo-1510127034890-ba27508e9f1c?w=500"
+  },
+  {
+    "id": "4",
+    "name": "Fujifilm X-T5",
+    "stock": 2,
+    "stock_text": "2 units",
+    "category": "Mirrorless Camera",
+    "location_count": 1,
+    "location_text": "Shelf B2",
+    "badge_status": "Low in stock",
+    "image_url": "https://images.unsplash.com/photo-1512790182412-b19e6d62bc39?w=500"
+  }
+]
