@@ -56,7 +56,7 @@ export default function ProductListScreen() {
   // 2. Using your specific GitHub Raw URL
 
 const GITHUB_JSON_URL =
-  "https://raw.githubusercontent.com/Prakun-s/Product01/main/sn_produc01t.json";
+  "https://raw.githubusercontent.com/Prakun-s/MYPROFILEPRAKUN/main/sn_produc01t.json";
 
 useEffect(() => {
 
