@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    RefreshControl,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { fetchProducts } from "./api";
@@ -147,7 +147,7 @@ export default function ProductListScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
 
       <View style={styles.header}>
         <Text style={styles.title}>
@@ -181,7 +181,7 @@ export default function ProductListScreen() {
         }
       />
 
-    </SafeAreaView>
+    </View>
   );
 }
 
