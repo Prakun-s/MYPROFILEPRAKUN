@@ -9,24 +9,38 @@ import {
     TouchableOpacity
 } from "react-native";
 
-import { addProduct } from "./api";
+import { updateProduct } from "./api";
+
+interface Product {
+  id: number;
+  name: string;
+  stock: number;
+  price: number;
+  stock_text: string;
+  category: string;
+  location_count: number;
+  location_text: string;
+  badge_status: string;
+  image_url: string;
+}
 
 interface Props {
+  product: Product;
   onSuccess: () => void;
 }
 
-export default function AddProductScreen({ onSuccess }: Props) {
+export default function EditProductScreen({ product, onSuccess }: Props) {
 
-  const [name, setName] = useState("");
-  const [stock, setStock] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("Mirrorless Camera");
-  const [location, setLocation] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [name, setName] = useState(product.name);
+  const [stock, setStock] = useState(String(product.stock));
+  const [price, setPrice] = useState(String(product.price ?? 0));
+  const [category, setCategory] = useState(product.category);
+  const [location, setLocation] = useState(product.location_text);
+  const [imageUrl, setImageUrl] = useState(product.image_url);
 
   const [loading, setLoading] = useState(false);
 
-  const handleAddProduct = async () => {
+  const handleUpdateProduct = async () => {
 
     if (!name.trim()) {
       Alert.alert("Error", "กรุณากรอกชื่อสินค้า");
@@ -34,32 +48,32 @@ export default function AddProductScreen({ onSuccess }: Props) {
     }
 
     try {
-  setLoading(true);
+      setLoading(true);
 
-  await addProduct({
-  name: name.trim(),
-  stock: Number(stock) || 0,
-  price: Number(price) || 0,
-  category,
-  location_text: location,
-  image_url: imageUrl,
-});
+      await updateProduct(product.id, {
+        name: name.trim(),
+        stock: Number(stock) || 0,
+        price: Number(price) || 0,
+        category,
+        location_text: location,
+        image_url: imageUrl,
+      });
 
-// กลับหน้า Inventory ทันที
-onSuccess();
+      // กลับหน้า Inventory ทันที
+      onSuccess();
 
-} catch (error: any) {
+    } catch (error: any) {
 
-  console.error(error);
+      console.error(error);
 
-  Alert.alert(
-    "Error",
-    error.message || "ไม่สามารถเพิ่มสินค้าได้"
-  );
+      Alert.alert(
+        "Error",
+        error.message || "ไม่สามารถแก้ไขสินค้าได้"
+      );
 
-} finally {
-  setLoading(false);
-}
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -69,7 +83,7 @@ onSuccess();
     >
 
       <Text style={styles.title}>
-        Add New Product
+        Edit Product
       </Text>
 
       {/* Product Name */}
@@ -147,16 +161,16 @@ onSuccess();
         autoCapitalize="none"
       />
 
-      {/* Add Button */}
+      {/* Save Button */}
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         activeOpacity={0.8}
-        onPress={handleAddProduct}
+        onPress={handleUpdateProduct}
         disabled={loading}
       >
 
         <Text style={styles.buttonText}>
-          {loading ? "Adding..." : "Add Product"}
+          {loading ? "Saving..." : "Save Changes"}
         </Text>
 
       </TouchableOpacity>

@@ -3,6 +3,9 @@ const cors = require("cors");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
+const authRouter = require("./src/routes/auth");
+const { authenticateToken, requireRole } = require("./src/middleware/auth");
+
 const app = express();
 
 const PORT = process.env.PORT || 3090;
@@ -12,6 +15,11 @@ const PORT = process.env.PORT || 3090;
 // =========================
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+
+// =========================
+// Auth routes (login / register / me)
+// =========================
+app.use("/api/auth", authRouter);
 
 // =========================
 // MySQL Connection
@@ -67,9 +75,9 @@ app.get("/api", (req, res) => {
 });
 
 // =========================
-// GET Products
+// GET Products (ต้อง login แล้ว ไม่ว่าจะเป็น user หรือ admin)
 // =========================
-app.get("/api/products", async (req, res) => {
+app.get("/api/products", authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.query(
       "SELECT * FROM Inventory ORDER BY id DESC"
@@ -92,9 +100,9 @@ app.get("/api/products", async (req, res) => {
 });
 
 // =========================
-// GET Product By ID
+// GET Product By ID (ต้อง login แล้ว)
 // =========================
-app.get("/api/products/:id", async (req, res) => {
+app.get("/api/products/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -127,13 +135,14 @@ app.get("/api/products/:id", async (req, res) => {
 });
 
 // =========================
-// POST Add Product
+// POST Add Product (เฉพาะ admin)
 // =========================
-app.post("/api/products", async (req, res) => {
+app.post("/api/products", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
     const {
       name,
       stock,
+      price,
       stock_text,
       category,
       location_count,
@@ -152,6 +161,9 @@ app.post("/api/products", async (req, res) => {
 
     // จำนวนสินค้า
     const productStock = Number(stock) || 0;
+
+    // ราคาสินค้า
+    const productPrice = Number(price) || 0;
 
     // ข้อความ Stock
     const productStockText =
@@ -175,6 +187,7 @@ app.post("/api/products", async (req, res) => {
       (
         name,
         stock,
+        price,
         stock_text,
         category,
         location_count,
@@ -182,11 +195,12 @@ app.post("/api/products", async (req, res) => {
         badge_status,
         image_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         name.trim(),
         productStock,
+        productPrice,
         productStockText,
         category || "Mirrorless Camera",
         productLocationCount,
@@ -215,9 +229,110 @@ app.post("/api/products", async (req, res) => {
 });
 
 // =========================
-// DELETE Product
+// PUT Update Product (เฉพาะ admin)
 // =========================
-app.delete("/api/products/:id", async (req, res) => {
+app.put("/api/products/:id", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      name,
+      stock,
+      price,
+      stock_text,
+      category,
+      location_count,
+      location_text,
+      badge_status,
+      image_url,
+    } = req.body;
+
+    // ตรวจสอบชื่อสินค้า
+    if (!name || name.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Product name is required",
+      });
+    }
+
+    // จำนวนสินค้า
+    const productStock = Number(stock) || 0;
+
+    // ราคาสินค้า
+    const productPrice = Number(price) || 0;
+
+    // ข้อความ Stock
+    const productStockText =
+      stock_text || `${productStock} units`;
+
+    // สถานะ Stock
+    const productBadge =
+      badge_status ||
+      (productStock < 5
+        ? "Low in stock"
+        : "Available");
+
+    // จำนวน Location
+    const productLocationCount =
+      Number(location_count) || 0;
+
+    // UPDATE
+    const [result] = await pool.query(
+      `
+      UPDATE Inventory
+      SET
+        name = ?,
+        stock = ?,
+        price = ?,
+        stock_text = ?,
+        category = ?,
+        location_count = ?,
+        location_text = ?,
+        badge_status = ?,
+        image_url = ?
+      WHERE id = ?
+      `,
+      [
+        name.trim(),
+        productStock,
+        productPrice,
+        productStockText,
+        category || "Mirrorless Camera",
+        productLocationCount,
+        location_text || "",
+        productBadge,
+        image_url || "",
+        id,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+    });
+
+  } catch (error) {
+    console.error("❌ Update product error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: error.message,
+    });
+  }
+});
+
+// =========================
+// DELETE Product (เฉพาะ admin)
+// =========================
+app.delete("/api/products/:id", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
     const { id } = req.params;
 
