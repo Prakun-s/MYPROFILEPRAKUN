@@ -1241,7 +1241,6 @@ const styles = StyleSheet.create({
   },
 
   row: {
-    flexDirection: "row",
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
   },

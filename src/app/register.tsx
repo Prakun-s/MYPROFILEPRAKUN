@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
 
   submitButton: {
-    backgroundColor: "#5B5FEF",
+    backgroundColor: "#111111",
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: "center",
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
 
   footerLink: {
     fontSize: 13,
-    color: "#5B5FEF",
+    color: "#111111",
     fontWeight: "600",
   },
 });

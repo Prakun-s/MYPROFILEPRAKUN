@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#5B5FEF",
+    backgroundColor: "#111111",
   },
 
   confirmButtonDestructive: {

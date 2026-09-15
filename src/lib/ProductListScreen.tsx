@@ -4,11 +4,11 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  FlatList,
   Image,
   Pressable,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -108,17 +108,6 @@ function getColumnCount(width: number) {
   if (width >= 1100) return 4;
   if (width >= 700) return 3;
   return 2;
-}
-
-// หั่นลิสต์แบนๆ ให้เป็นแถวๆ ละ `size` ชิ้น สำหรับเรนเดอร์กริดแบบ View ธรรมดา
-function chunk<T>(items: T[], size: number): T[][] {
-  const rows: T[][] = [];
-
-  for (let i = 0; i < items.length; i += size) {
-    rows.push(items.slice(i, i + size));
-  }
-
-  return rows;
 }
 
 const CONTAINER_PADDING = 16;
@@ -732,140 +721,131 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
   return (
     <View style={styles.container}>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {/* HERO CAROUSEL: เต็มความกว้างจอ อยู่เหนือแผงตัวกรอง+กริดสินค้า */}
-        <HeroCarousel products={products} containerWidth={width} />
+      {/* HERO CAROUSEL: เต็มความกว้างจอ อยู่เหนือแผงตัวกรอง+กริดสินค้า */}
+      <HeroCarousel products={products} containerWidth={width} />
 
-        <View style={styles.bodyRow}>
-          {/* แผงตัวกรองปักซ้าย โชว์เฉพาะจอกว้างพอ (เดสก์ท็อป/แท็บเล็ต) เลื่อนลงไปพร้อมกับหน้าทั้งหมด */}
-          {isWideLayout && (
-            <View style={styles.sidebar}>
-              <FilterPanel
-                selectedBrands={selectedBrands}
-                onToggleBrand={toggleBrand}
-                selectedPriceBands={selectedPriceBands}
-                onTogglePriceBand={togglePriceBand}
-                onClearAll={clearAllFilters}
+      <View style={styles.bodyRow}>
+        {/* แผงตัวกรองปักซ้าย โชว์เฉพาะจอกว้างพอ (เดสก์ท็อป/แท็บเล็ต) */}
+        {isWideLayout && (
+          <View style={styles.sidebar}>
+            <FilterPanel
+              selectedBrands={selectedBrands}
+              onToggleBrand={toggleBrand}
+              selectedPriceBands={selectedPriceBands}
+              onTogglePriceBand={togglePriceBand}
+              onClearAll={clearAllFilters}
+            />
+          </View>
+        )}
+
+        <View style={styles.content}>
+          <FlatList
+            key={`grid-${numColumns}`}
+            data={filteredProducts}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderProduct}
+            numColumns={numColumns}
+            columnWrapperStyle={styles.row}
+            contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
               />
-            </View>
-          )}
+            }
+            ListHeaderComponent={
+              <View>
+                {/* SEARCH */}
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>All Products</Text>
 
-          <View style={styles.content}>
-            {/* SEARCH */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>All Products</Text>
 
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {/* บนจอแคบไม่มีที่พอสำหรับ sidebar เลยใช้ปุ่มเปิด/ปิดแผงตัวกรองแทน */}
-                {!isWideLayout && (
-                  <TouchableOpacity
-                    style={[
-                      styles.refreshButton,
-                      (filterOpen || hasActiveFilters) &&
-                        styles.filterButtonActive,
-                    ]}
-                    activeOpacity={0.7}
-                    onPress={() => setFilterOpen((o) => !o)}
-                  >
-                    <Text
-                      style={[
-                        styles.refreshText,
-                        (filterOpen || hasActiveFilters) &&
-                          styles.filterButtonActiveText,
-                      ]}
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    {/* บนจอแคบไม่มีที่พอสำหรับ sidebar เลยใช้ปุ่มเปิด/ปิดแผงตัวกรองแทน */}
+                    {!isWideLayout && (
+                      <TouchableOpacity
+                        style={[
+                          styles.refreshButton,
+                          (filterOpen || hasActiveFilters) &&
+                            styles.filterButtonActive,
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => setFilterOpen((o) => !o)}
+                      >
+                        <Text
+                          style={[
+                            styles.refreshText,
+                            (filterOpen || hasActiveFilters) &&
+                              styles.filterButtonActiveText,
+                          ]}
+                        >
+                          ตัวกรอง
+                          {hasActiveFilters
+                            ? ` (${selectedBrands.length + selectedPriceBands.length})`
+                            : ""}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.refreshButton}
+                      activeOpacity={0.7}
+                      onPress={loadProducts}
                     >
-                      ตัวกรอง
-                      {hasActiveFilters
-                        ? ` (${selectedBrands.length + selectedPriceBands.length})`
-                        : ""}
-                    </Text>
-                  </TouchableOpacity>
+                      <Text style={styles.refreshText}>Refresh</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.searchWrapper}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="ค้นหาสินค้า ชื่อ, หมวดหมู่, ตำแหน่ง..."
+                    placeholderTextColor="#A9A8A2"
+                    value={searchText}
+                    onChangeText={setSearchText}
+                  />
+
+                  {searchText.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      activeOpacity={0.7}
+                      onPress={() => setSearchText("")}
+                    >
+                      <Text style={styles.clearButtonText}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {!isWideLayout && filterOpen && (
+                  <View style={{ marginHorizontal: CONTAINER_PADDING }}>
+                    <FilterPanel
+                      selectedBrands={selectedBrands}
+                      onToggleBrand={toggleBrand}
+                      selectedPriceBands={selectedPriceBands}
+                      onTogglePriceBand={togglePriceBand}
+                      onClearAll={clearAllFilters}
+                    />
+                  </View>
                 )}
 
-                <TouchableOpacity
-                  style={styles.refreshButton}
-                  activeOpacity={0.7}
-                  onPress={loadProducts}
-                >
-                  <Text style={styles.refreshText}>Refresh</Text>
-                </TouchableOpacity>
+                <Text style={styles.count}>
+                  {searchText || hasActiveFilters
+                    ? `พบ ${filteredProducts.length} จาก ${products.length} รายการ`
+                    : `${products.length} Products`}
+                </Text>
               </View>
-            </View>
-
-            <View style={styles.searchWrapper}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="ค้นหาสินค้า ชื่อ, หมวดหมู่, ตำแหน่ง..."
-                placeholderTextColor="#A9A8A2"
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-
-              {searchText.length > 0 && (
-                <TouchableOpacity
-                  style={styles.clearButton}
-                  activeOpacity={0.7}
-                  onPress={() => setSearchText("")}
-                >
-                  <Text style={styles.clearButtonText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {!isWideLayout && filterOpen && (
-              <View style={{ marginHorizontal: CONTAINER_PADDING }}>
-                <FilterPanel
-                  selectedBrands={selectedBrands}
-                  onToggleBrand={toggleBrand}
-                  selectedPriceBands={selectedPriceBands}
-                  onTogglePriceBand={togglePriceBand}
-                  onClearAll={clearAllFilters}
-                />
-              </View>
-            )}
-
-            <Text style={styles.count}>
-              {searchText || hasActiveFilters
-                ? `พบ ${filteredProducts.length} จาก ${products.length} รายการ`
-                : `${products.length} Products`}
-            </Text>
-
-            {/* GRID สินค้า: เรนเดอร์เป็นแถวๆ ธรรมดา ไม่ใช้ FlatList
-                เพื่อให้อยู่ใน ScrollView เดียวกับ hero และแผงตัวกรอง เลื่อนไปด้วยกันทั้งหน้า */}
-            {filteredProducts.length === 0 ? (
+            }
+            ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>
                   ไม่พบสินค้าที่ตรงกับ "{searchText}"
                 </Text>
               </View>
-            ) : (
-              <View style={styles.list}>
-                {chunk(filteredProducts, numColumns).map((rowItems, rowIndex) => (
-                  <View key={rowIndex} style={styles.row}>
-                    {rowItems.map((item) => (
-                      <View key={item.id}>{renderProduct({ item })}</View>
-                    ))}
-
-                    {/* เติมช่องว่างในแถวสุดท้ายถ้าสินค้าไม่ครบคอลัมน์ ไม่งั้นการ์ดจะยืดเต็มแถว */}
-                    {rowItems.length < numColumns &&
-                      Array.from({ length: numColumns - rowItems.length }).map(
-                        (_, i) => (
-                          <View key={`spacer-${i}`} style={{ width: cardWidth }} />
-                        )
-                      )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+            }
+          />
         </View>
-      </ScrollView>
+      </View>
 
       <ConfirmDialog
         visible={!!deleteTarget}
@@ -1241,7 +1221,6 @@ const styles = StyleSheet.create({
   },
 
   row: {
-    flexDirection: "row",
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
   },

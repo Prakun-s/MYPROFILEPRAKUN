@@ -117,3 +117,97 @@ export async function deleteProduct(id: number) {
 
   return result;
 }
+
+// ===== Cart =====
+
+export async function fetchCart() {
+  const response = await fetch(`${API_URL}/api/cart`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch cart");
+  }
+
+  return result.data;
+}
+
+export async function addToCart(productId: number, quantity: number = 1) {
+  const response = await fetch(`${API_URL}/api/cart`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ product_id: productId, quantity }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to add to cart");
+  }
+
+  return result;
+}
+
+export async function updateCartItem(productId: number, quantity: number) {
+  const response = await fetch(`${API_URL}/api/cart/${productId}`, {
+    method: "PUT",
+    headers: await authHeaders(),
+    body: JSON.stringify({ quantity }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to update cart");
+  }
+
+  return result;
+}
+
+export async function removeFromCart(productId: number) {
+  const response = await fetch(`${API_URL}/api/cart/${productId}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to remove item");
+  }
+
+  return result;
+}
+
+// ===== Checkout / Orders =====
+
+export async function checkout() {
+  const response = await fetch(`${API_URL}/api/checkout`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Checkout failed");
+  }
+
+  return result;
+}
+
+export async function fetchMyOrders() {
+  const response = await fetch(`${API_URL}/api/orders/my`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch orders");
+  }
+
+  return result.data;
+}

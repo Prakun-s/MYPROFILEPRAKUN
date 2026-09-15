@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { CartProvider } from "../context/CartContext";
 
 function AuthGate() {
   const { user, isLoading } = useAuth();
@@ -41,7 +42,9 @@ function AuthGate() {
 export default function Layout() {
   return (
     <AuthProvider>
-      <AuthGate />
+      <CartProvider>
+        <AuthGate />
+      </CartProvider>
     </AuthProvider>
   );
 }

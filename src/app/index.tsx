@@ -8,15 +8,19 @@ import {
 } from "react-native";
 
 import AddProductScreen from "../AddProductScreen";
+import CartScreen from "../CartScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import EditProductScreen from "../EditProductScreen";
+import OrdersScreen from "../OrdersScreen";
 import ProductListScreen from "../ProductListScreen";
 
 interface Product {
   id: number;
   name: string;
   stock: number;
+  price: number;
   stock_text: string;
   category: string;
   location_count: number;
@@ -27,7 +31,10 @@ interface Product {
 
 export default function HomeScreen() {
   const { user, isAdmin, logout } = useAuth();
-  const [screen, setScreen] = useState<"products" | "add" | "edit">("products");
+  const { cartCount } = useCart();
+  const [screen, setScreen] = useState<
+    "products" | "add" | "edit" | "cart" | "orders"
+  >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
 
@@ -115,6 +122,63 @@ export default function HomeScreen() {
     );
   }
 
+  if (screen === "cart") {
+    return (
+      <View style={styles.container}>
+
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>ตะกร้าสินค้า</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <CartScreen
+            onBack={() => setScreen("products")}
+            onViewOrders={() => setScreen("orders")}
+          />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "orders") {
+    return (
+      <View style={styles.container}>
+
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>ประวัติการสั่งซื้อ</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <OrdersScreen />
+        </View>
+
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
 
@@ -123,7 +187,7 @@ export default function HomeScreen() {
 
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>
-            Inventory
+            PRAKUN SHOP
           </Text>
 
           <View style={styles.userBadge}>
@@ -148,6 +212,22 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={styles.cartIconButton}
+            activeOpacity={0.6}
+            onPress={() => setScreen("cart")}
+          >
+            <Text style={styles.cartIconText}>🛒</Text>
+
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {cartCount > 99 ? "99+" : cartCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.logoutButton}
@@ -229,7 +309,7 @@ const styles = StyleSheet.create({
   },
 
   userBadge: {
-    backgroundColor: "#EEF0FF",
+    backgroundColor: "#F0F0F0",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -238,7 +318,7 @@ const styles = StyleSheet.create({
   userBadgeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#5B5FEF",
+    color: "#111111",
   },
 
   logoutButton: {
@@ -259,7 +339,7 @@ const styles = StyleSheet.create({
   },
 
   addButton: {
-    backgroundColor: "#5B5FEF",
+    backgroundColor: "#111111",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -275,6 +355,47 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  screenTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111111",
+  },
+
+  cartIconButton: {
+    position: "relative",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+
+    zIndex: 101,
+    elevation: 101,
+  },
+
+  cartIconText: {
+    fontSize: 16,
+  },
+
+  cartBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#111111",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+
+  cartBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
   backButton: {
     paddingHorizontal: 8,
     paddingVertical: 8,
@@ -286,7 +407,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#5B5FEF",
+    color: "#111111",
   },
 
   content: {
