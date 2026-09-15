@@ -208,26 +208,10 @@ export default function HomeScreen() {
               }}
             >
               <Text style={styles.addButtonText}>
-                + Add Product
+                + Add
               </Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            style={styles.cartIconButton}
-            activeOpacity={0.6}
-            onPress={() => setScreen("cart")}
-          >
-            <Text style={styles.cartIconText}>🛒</Text>
-
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {cartCount > 99 ? "99+" : cartCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.logoutButton}
@@ -252,6 +236,23 @@ export default function HomeScreen() {
           }}
         />
       </View>
+
+      {/* FLOATING CART BUTTON */}
+      <TouchableOpacity
+        style={styles.floatingCart}
+        activeOpacity={0.7}
+        onPress={() => setScreen("cart")}
+      >
+        <Text style={styles.cartIconText}>🛒</Text>
+
+        {cartCount > 0 && (
+          <View style={styles.cartBadge}>
+            <Text style={styles.cartBadgeText}>
+              {cartCount > 99 ? "99+" : cartCount}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
 
       <ConfirmDialog
         visible={logoutDialogVisible}
@@ -298,7 +299,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
 
   headerTitle: {
@@ -322,9 +323,9 @@ const styles = StyleSheet.create({
   },
 
   logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#E5E3DC",
 
@@ -333,16 +334,16 @@ const styles = StyleSheet.create({
   },
 
   logoutButtonText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     color: "#D2585F",
   },
 
   addButton: {
     backgroundColor: "#111111",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
 
     // สำคัญ
     zIndex: 101,
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
 
   addButtonText: {
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
 
@@ -361,33 +362,42 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
 
-  cartIconButton: {
-    position: "relative",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+  // ปุ่มตะกร้าลอยมุมขวาล่าง
+  floatingCart: {
+    position: "absolute",
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E5E3DC",
-
-    zIndex: 101,
-    elevation: 101,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 200,
   },
 
   cartIconText: {
-    fontSize: 16,
+    fontSize: 22,
   },
 
   cartBadge: {
     position: "absolute",
-    top: -6,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#111111",
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#D2585F",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
 
   cartBadgeText: {
