@@ -17,8 +17,8 @@ import {
   View,
 } from "react-native";
 
-import ConfirmDialog from "./components/ConfirmDialog";
 import { addToCart, fetchProducts } from "./api";
+import ConfirmDialog from "./components/ConfirmDialog";
 import { useCart } from "./context/CartContext";
 import { useDeleteProduct } from "./hooks/use-delete-product";
 import { useProductSearch } from "./hooks/use-product-search";
@@ -37,13 +37,6 @@ interface Product {
 }
 
 type PriceTier = "Low" | "Mid" | "High";
-
-// เกณฑ์ราคาแบบตายตัว อิงมาตรฐานตลาดกล้อง Mirrorless (ปรับตัวเลขตรงนี้ได้ตามต้องการ)
-// Low   = กล้องระดับเริ่มต้น (entry-level)   ต่ำกว่า 30,000 บาท
-// Mid   = กล้องระดับกลาง (enthusiast/prosumer) 30,000 - 70,000 บาท
-// High  = กล้องระดับมืออาชีพ (professional)    มากกว่า 70,000 บาท
-const PRICE_TIER_LOW_MAX = 30000; // ต่ำกว่า 30,000 = Low
-const PRICE_TIER_MID_MAX = 70000; // 30,000 - 70,000 = Mid, มากกว่า 70,000 = High
 
 // ตัวเลือกแบรนด์สำหรับตัวกรอง (เทียบจากชื่อสินค้าว่ามีคำนี้อยู่มั้ย)
 const BRAND_OPTIONS = ["Canon", "Fujifilm", "Sony", "Nikon"] as const;
@@ -86,18 +79,53 @@ const PRICE_BAND_OPTIONS: PriceBandOption[] = [
   },
 ];
 
-function getPriceTier(price: number): PriceTier {
-  if (price < PRICE_TIER_LOW_MAX) return "Low";
-  if (price <= PRICE_TIER_MID_MAX) return "Mid";
-  return "High";
+// จัดกลุ่ม Low / Mid / High แบบไดนามิก: คำนวณจากการกระจายตัวของราคาสินค้าจริงในร้าน ณ ตอนนั้น
+// ใช้วิธีแบ่ง tertile (percentile ที่ 33% และ 66%) แทนการตั้งเลขตายตัว
+// เมื่อสินค้าหรือราคาในร้านเปลี่ยน เส้นแบ่งกลุ่มจะขยับตามโดยอัตโนมัติ
+function getPercentile(sortedPrices: number[], p: number): number {
+  if (sortedPrices.length === 0) return 0;
+  if (sortedPrices.length === 1) return sortedPrices[0];
+
+  const idx = (sortedPrices.length - 1) * p;
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+
+  if (lower === upper) return sortedPrices[lower];
+
+  // ค่าระหว่างสอง index ให้ใช้ linear interpolation
+  return (
+    sortedPrices[lower] +
+    (sortedPrices[upper] - sortedPrices[lower]) * (idx - lower)
+  );
 }
 
-// แปะป้าย Low / Mid / High ให้สินค้าแต่ละชิ้นตามเกณฑ์ราคาตายตัวด้านบน
+// แปะป้าย Low / Mid / High ให้สินค้าแต่ละชิ้น โดยอิงจากการกระจายตัวของราคาสินค้าทั้งหมดที่มีอยู่จริง
 function classifyPricesByTier(items: Product[]): Map<number, PriceTier> {
   const tierById = new Map<number, PriceTier>();
 
+  if (items.length === 0) return tierById;
+
+  const sortedPrices = items
+    .map((item) => Number(item.price) || 0)
+    .sort((a, b) => a - b);
+
+  // เส้นแบ่งที่ 33% และ 66% ของการกระจายตัวราคา -> แบ่งสินค้าออกเป็น 3 กลุ่มใกล้เคียงกัน
+  const lowBoundary = getPercentile(sortedPrices, 1 / 3);
+  const highBoundary = getPercentile(sortedPrices, 2 / 3);
+
   items.forEach((item) => {
-    tierById.set(item.id, getPriceTier(Number(item.price) || 0));
+    const price = Number(item.price) || 0;
+    let tier: PriceTier;
+
+    if (price <= lowBoundary) {
+      tier = "Low";
+    } else if (price <= highBoundary) {
+      tier = "Mid";
+    } else {
+      tier = "High";
+    }
+
+    tierById.set(item.id, tier);
   });
 
   return tierById;
@@ -544,7 +572,8 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
     });
   }, [searchedProducts, selectedBrands, selectedPriceBands]);
 
-  // แปะป้าย Low / Mid / High ใหม่ทุกครั้งที่รายการสินค้าเปลี่ยน (เกณฑ์ตายตัว)
+  // แปะป้าย Low / Mid / High ใหม่ทุกครั้งที่รายการสินค้าเปลี่ยน
+  // คำนวณแบบไดนามิกจากการกระจายตัวของราคาสินค้าจริง (ดู classifyPricesByTier ด้านบน)
   const priceTierById = useMemo(
     () => classifyPricesByTier(products),
     [products]
