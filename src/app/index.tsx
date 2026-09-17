@@ -4,17 +4,25 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View
 } from "react-native";
 
 import AddProductScreen from "../AddProductScreen";
+import AdminOrdersScreen from "../AdminOrdersScreen";
 import CartScreen from "../CartScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ShopLogo from "../components/ShopLogo";
+import UserMenu from "../components/UserMenu";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
+import DashboardScreen from "../DashboardScreen";
 import EditProductScreen from "../EditProductScreen";
 import OrdersScreen from "../OrdersScreen";
+import ProductDetailScreen from "../ProductDetailScreen";
 import ProductListScreen from "../ProductListScreen";
+import WishlistScreen from "../WishlistScreen";
 
 interface Product {
   id: number;
@@ -32,8 +40,20 @@ interface Product {
 export default function HomeScreen() {
   const { user, isAdmin, logout } = useAuth();
   const { cartCount } = useCart();
+  const { items: wishlistItems } = useWishlist();
+  const { width } = useWindowDimensions();
+  // จอแคบ (มือถือ) < 640 → ยุบส่วนหัวให้กระชับ เตรียมไว้สำหรับตอนแตกเป็นแอปมือถือ
+  const isMobile = width < 640;
   const [screen, setScreen] = useState<
-    "products" | "add" | "edit" | "cart" | "orders"
+    | "products"
+    | "add"
+    | "edit"
+    | "cart"
+    | "orders"
+    | "detail"
+    | "wishlist"
+    | "dashboard"
+    | "adminOrders"
   >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
@@ -56,7 +76,7 @@ export default function HomeScreen() {
   // ผู้ใช้ role "user" ไม่มีสิทธิ์เข้าหน้าเพิ่ม/แก้ไขสินค้า
   // (กันไว้อีกชั้นแม้ปุ่มจะถูกซ่อนไปแล้ว)
   useEffect(() => {
-    if ((screen === "add" || screen === "edit") && !isAdmin) {
+    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders") && !isAdmin) {
       setScreen("products");
     }
   }, [screen, isAdmin]);
@@ -65,7 +85,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
 
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
@@ -93,7 +113,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
 
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
@@ -126,7 +146,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
 
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => setScreen("products")}
@@ -156,7 +176,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
 
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => setScreen("products")}
@@ -179,22 +199,136 @@ export default function HomeScreen() {
     );
   }
 
+  if (screen === "detail" && selectedProduct) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              setScreen("products");
+              setSelectedProduct(null);
+            }}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>รายละเอียดสินค้า</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <ProductDetailScreen
+            product={selectedProduct}
+            onBack={() => {
+              setScreen("products");
+              setSelectedProduct(null);
+            }}
+          />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "wishlist") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>สินค้าที่ถูกใจ</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <WishlistScreen
+            onOpenProduct={(product) => {
+              setSelectedProduct(product as unknown as Product);
+              setScreen("detail");
+            }}
+          />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "dashboard" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>แดชบอร์ด</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <DashboardScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "adminOrders" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>จัดการออเดอร์</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <AdminOrdersScreen />
+        </View>
+
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
 
       {/* HEADER */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
 
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>
-            PRAKUN SHOP
-          </Text>
-
-          <View style={styles.userBadge}>
-            <Text style={styles.userBadgeText}>
-              {user?.username} · {isAdmin ? "Admin" : "User"}
-            </Text>
-          </View>
+          <ShopLogo isMobile={isMobile} />
         </View>
 
         <View style={styles.headerRight}>
@@ -202,16 +336,29 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.addButton}
               activeOpacity={0.5}
-              onPress={() => {
-                console.log("ADD PRODUCT CLICKED");
-                setScreen("add");
-              }}
+              onPress={() => setScreen("add")}
             >
               <Text style={styles.addButtonText}>
-                + Add Product
+                {isMobile ? "＋" : "+ Add Product"}
               </Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.6}
+            onPress={() => setScreen("wishlist")}
+          >
+            <Text style={styles.cartIconText}>♡</Text>
+
+            {wishlistItems.length > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {wishlistItems.length > 99 ? "99+" : wishlistItems.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.cartIconButton}
@@ -229,15 +376,16 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.logoutButton}
-            activeOpacity={0.6}
-            onPress={confirmLogout}
-          >
-            <Text style={styles.logoutButtonText}>
-              ออกจากระบบ
-            </Text>
-          </TouchableOpacity>
+          {/* UserMenu ย้ายมาอยู่ขวาสุดเสมอ ไม่ว่าจอกว้างหรือแคบ */}
+          <UserMenu
+            username={user?.username}
+            roleLabel={isAdmin ? "Admin" : "User"}
+            isAdmin={isAdmin}
+            onDashboard={() => setScreen("dashboard")}
+            onAdminOrders={() => setScreen("adminOrders")}
+            onOrders={() => setScreen("orders")}
+            onLogout={confirmLogout}
+          />
         </View>
 
       </View>
@@ -249,6 +397,10 @@ export default function HomeScreen() {
           onEditProduct={(product) => {
             setSelectedProduct(product);
             setScreen("edit");
+          }}
+          onOpenProduct={(product) => {
+            setSelectedProduct(product);
+            setScreen("detail");
           }}
         />
       </View>
@@ -289,6 +441,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
+  topBarMobile: {
+    height: 56,
+    paddingHorizontal: 12,
+  },
+
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
@@ -299,43 +456,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    letterSpacing: -0.3,
-    color: "#2B2B31",
-  },
-
-  userBadge: {
-    backgroundColor: "#F0F0F0",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  userBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#111111",
-  },
-
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E3DC",
-
-    zIndex: 101,
-    elevation: 101,
-  },
-
-  logoutButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#D2585F",
   },
 
   addButton: {
@@ -362,6 +482,18 @@ const styles = StyleSheet.create({
   },
 
   cartIconButton: {
+    position: "relative",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+
+    zIndex: 101,
+    elevation: 101,
+  },
+
+  iconButton: {
     position: "relative",
     paddingHorizontal: 10,
     paddingVertical: 8,

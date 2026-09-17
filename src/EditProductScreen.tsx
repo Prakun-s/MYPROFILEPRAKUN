@@ -18,6 +18,7 @@ interface Product {
   price: number;
   stock_text: string;
   category: string;
+  description?: string;
   location_count: number;
   location_text: string;
   badge_status: string;
@@ -35,6 +36,7 @@ export default function EditProductScreen({ product, onSuccess }: Props) {
   const [stock, setStock] = useState(String(product.stock));
   const [price, setPrice] = useState(String(product.price ?? 0));
   const [category, setCategory] = useState(product.category);
+  const [description, setDescription] = useState(product.description ?? "");
   const [location, setLocation] = useState(product.location_text);
   const [imageUrl, setImageUrl] = useState(product.image_url);
 
@@ -55,6 +57,7 @@ export default function EditProductScreen({ product, onSuccess }: Props) {
         stock: Number(stock) || 0,
         price: Number(price) || 0,
         category,
+        description: description.trim(),
         location_text: location,
         image_url: imageUrl,
       });
@@ -134,6 +137,21 @@ export default function EditProductScreen({ product, onSuccess }: Props) {
         placeholder="เช่น Mirrorless Camera"
         value={category}
         onChangeText={setCategory}
+      />
+
+      {/* Description */}
+      <Text style={styles.label}>
+        รายละเอียดสินค้า (Description)
+      </Text>
+
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        placeholder="อธิบายจุดเด่นของสินค้า เช่น สเปค การใช้งาน จุดขาย..."
+        value={description}
+        onChangeText={setDescription}
+        multiline
+        numberOfLines={5}
+        textAlignVertical="top"
       />
 
       {/* Location */}
@@ -216,6 +234,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: "#2B2B31",
+  },
+
+  textArea: {
+    minHeight: 110,
+    paddingTop: 12,
   },
 
   button: {

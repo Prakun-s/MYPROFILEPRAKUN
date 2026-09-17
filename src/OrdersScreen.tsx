@@ -20,8 +20,34 @@ interface OrderItem {
 interface Order {
   id: number;
   total_amount: number;
+  status?: "pending" | "shipping" | "delivered" | "cancelled";
   created_at: string;
   items: OrderItem[];
+}
+
+const STATUS_META: Record<
+  "pending" | "shipping" | "delivered" | "cancelled",
+  { label: string; tone: "pending" | "shipping" | "delivered" | "cancelled" }
+> = {
+  pending: { label: "กำลังเตรียมสินค้า", tone: "pending" },
+  shipping: { label: "กำลังจัดส่ง", tone: "shipping" },
+  delivered: { label: "จัดส่งสำเร็จ", tone: "delivered" },
+  cancelled: { label: "ยกเลิกออเดอร์", tone: "cancelled" },
+};
+
+// เผื่อกรณียังไม่ได้รัน migration เพิ่มคอลัมน์ status ใน DB (order.status จะเป็น undefined)
+// จำลองสถานะจากอายุของออเดอร์ไปก่อนเป็น fallback เท่านั้น
+function getShippingStatus(order: Order) {
+  if (order.status && STATUS_META[order.status]) {
+    return STATUS_META[order.status];
+  }
+
+  const hoursSince =
+    (Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60);
+
+  if (hoursSince < 1) return STATUS_META.pending;
+  if (hoursSince < 24) return STATUS_META.shipping;
+  return STATUS_META.delivered;
 }
 
 export default function OrdersScreen() {
@@ -64,42 +90,60 @@ export default function OrdersScreen() {
       data={orders}
       keyExtractor={(order) => String(order.id)}
       contentContainerStyle={styles.list}
-      renderItem={({ item: order }) => (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.orderId}>คำสั่งซื้อ #{order.id}</Text>
+      renderItem={({ item: order }) => {
+        const status = getShippingStatus(order);
 
-            <Text style={styles.orderDate}>
-              {new Date(order.created_at).toLocaleDateString("th-TH", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
+        return (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View>
+                <Text style={styles.orderId}>คำสั่งซื้อ #{order.id}</Text>
 
-          {order.items.map((item, index) => (
-            <View key={index} style={styles.itemRow}>
-              <Text style={styles.itemName} numberOfLines={1}>
-                {item.product_name} × {item.quantity}
-              </Text>
+                <Text style={styles.orderDate}>
+                  {new Date(order.created_at).toLocaleDateString("th-TH", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
 
-              <Text style={styles.itemPrice}>
-                ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
+              <Text
+                style={[
+                  styles.statusBadge,
+                  status.tone === "pending" && styles.statusPending,
+                  status.tone === "shipping" && styles.statusShipping,
+                  status.tone === "delivered" && styles.statusDelivered,
+                  status.tone === "cancelled" && styles.statusCancelled,
+                ]}
+              >
+                {status.label}
               </Text>
             </View>
-          ))}
 
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>ยอดรวม</Text>
-            <Text style={styles.totalValue}>
-              ฿{Number(order.total_amount).toLocaleString("th-TH")}
-            </Text>
+            {order.items.map((item, index) => (
+              <View key={index} style={styles.itemRow}>
+                <Text style={styles.itemName} numberOfLines={1}>
+                  {item.product_name} × {item.quantity}
+                </Text>
+
+                <Text style={styles.itemPrice}>
+                  ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
+                </Text>
+              </View>
+            ))}
+
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>ยอดรวม</Text>
+              <Text style={styles.totalValue}>
+                ฿{Number(order.total_amount).toLocaleString("th-TH")}
+              </Text>
+            </View>
           </View>
-        </View>
-      )}
+        );
+      }}
       ListEmptyComponent={
         <View style={styles.center}>
           <Text style={styles.emptyText}>ยังไม่มีประวัติการสั่งซื้อ</Text>
@@ -136,7 +180,37 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 10,
+  },
+
+  statusBadge: {
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+
+  statusPending: {
+    backgroundColor: "#FFF3E0",
+    color: "#B26A00",
+  },
+
+  statusShipping: {
+    backgroundColor: "#E8F0FE",
+    color: "#1A56C4",
+  },
+
+  statusDelivered: {
+    backgroundColor: "#E7F6EC",
+    color: "#1E8E3E",
+  },
+
+  statusCancelled: {
+    backgroundColor: "#FBEAE9",
+    color: "#B3413E",
   },
 
   orderId: {

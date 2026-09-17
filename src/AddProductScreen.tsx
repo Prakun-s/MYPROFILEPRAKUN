@@ -21,6 +21,7 @@ export default function AddProductScreen({ onSuccess }: Props) {
   const [stock, setStock] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("Mirrorless Camera");
+  const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [imageUrl, setImageUrl] = useState("");
 
@@ -41,6 +42,7 @@ export default function AddProductScreen({ onSuccess }: Props) {
   stock: Number(stock) || 0,
   price: Number(price) || 0,
   category,
+  description: description.trim(),
   location_text: location,
   image_url: imageUrl,
 });
@@ -120,6 +122,21 @@ onSuccess();
         placeholder="เช่น Mirrorless Camera"
         value={category}
         onChangeText={setCategory}
+      />
+
+      {/* Description */}
+      <Text style={styles.label}>
+        รายละเอียดสินค้า (Description)
+      </Text>
+
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        placeholder="อธิบายจุดเด่นของสินค้า เช่น สเปค การใช้งาน จุดขาย..."
+        value={description}
+        onChangeText={setDescription}
+        multiline
+        numberOfLines={5}
+        textAlignVertical="top"
       />
 
       {/* Location */}
@@ -202,6 +219,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: "#2B2B31",
+  },
+
+  textArea: {
+    minHeight: 110,
+    paddingTop: 12,
   },
 
   button: {

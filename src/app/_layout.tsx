@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { CartProvider } from "../context/CartContext";
+import { WishlistProvider } from "../context/WishlistContext";
 
 function AuthGate() {
   const { user, isLoading } = useAuth();
@@ -43,7 +44,9 @@ export default function Layout() {
   return (
     <AuthProvider>
       <CartProvider>
-        <AuthGate />
+        <WishlistProvider>
+          <AuthGate />
+        </WishlistProvider>
       </CartProvider>
     </AuthProvider>
   );

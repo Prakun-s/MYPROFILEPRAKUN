@@ -17,8 +17,8 @@ import {
   View,
 } from "react-native";
 
-import ConfirmDialog from "./components/ConfirmDialog";
 import { addToCart, fetchProducts } from "./api";
+import ConfirmDialog from "./components/ConfirmDialog";
 import { useCart } from "./context/CartContext";
 import { useDeleteProduct } from "./hooks/use-delete-product";
 import { useProductSearch } from "./hooks/use-product-search";
@@ -1174,15 +1174,16 @@ const styles = StyleSheet.create({
   },
 
   searchWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: CONTAINER_PADDING,
-    marginBottom: 10,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    paddingHorizontal: 12,
+  flexDirection: "row",
+  alignItems: "center",
+  marginHorizontal: CONTAINER_PADDING,
+  marginBottom: 10,
+  backgroundColor: "#FFFFFF",
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: "#E0E0E0",
+  paddingHorizontal: 12,
+  maxWidth: 420,
   },
 
   searchInput: {

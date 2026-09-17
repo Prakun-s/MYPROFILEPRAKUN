@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Image,
+  Modal,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -18,8 +19,11 @@ import {
 } from "react-native";
 
 import ConfirmDialog from "./components/ConfirmDialog";
+import SkeletonCard from "./components/SkeletonCard";
+import Toast from "./components/Toast";
 import { addToCart, fetchProducts } from "./api";
 import { useCart } from "./context/CartContext";
+import { useWishlist } from "./context/WishlistContext";
 import { useDeleteProduct } from "./hooks/use-delete-product";
 import { useProductSearch } from "./hooks/use-product-search";
 
@@ -85,6 +89,34 @@ const PRICE_BAND_OPTIONS: PriceBandOption[] = [
     test: (price) => price > 80000,
   },
 ];
+
+// ตัวเลือกการเรียงลำดับสินค้า
+type SortId = "newest" | "price-asc" | "price-desc";
+
+const SORT_OPTIONS: { id: SortId; label: string }[] = [
+  { id: "newest", label: "มาใหม่ล่าสุด" },
+  { id: "price-asc", label: "ราคา: น้อย → มาก" },
+  { id: "price-desc", label: "ราคา: มาก → น้อย" },
+];
+
+function sortProducts<T extends { id: number; price: number }>(
+  items: T[],
+  sortId: SortId
+): T[] {
+  const copy = [...items];
+
+  if (sortId === "price-asc") {
+    return copy.sort((a, b) => Number(a.price) - Number(b.price));
+  }
+
+  if (sortId === "price-desc") {
+    return copy.sort((a, b) => Number(b.price) - Number(a.price));
+  }
+
+  // "มาใหม่ล่าสุด" -> backend ส่งมาเรียง id DESC (ใหม่สุดก่อน) อยู่แล้ว
+  // เรียงตาม id DESC ซ้ำอีกชั้นเผื่อลำดับเพี้ยนจากการกรอง/ค้นหา
+  return copy.sort((a, b) => b.id - a.id);
+}
 
 function getPriceTier(price: number): PriceTier {
   if (price < PRICE_TIER_LOW_MAX) return "Low";
@@ -403,12 +435,114 @@ function FilterPanel({
   );
 }
 
+// ปุ่ม dropdown เรียงลำดับสินค้า วางข้างๆ ปุ่มตัวกรอง
+// ใช้ Modal (ไม่ใช่ position:absolute ธรรมดา) เพื่อให้เมนูลอยอยู่บนสุดเสมอ ไม่โดนการ์ดสินค้าทับ
+// และยังทำงานถูกต้องเหมือนกันทั้งเว็บและแอปมือถือจริง (iOS/Android)
+function SortDropdown({
+  value,
+  onChange,
+}: {
+  value: SortId;
+  onChange: (id: SortId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const buttonRef = useRef<View>(null);
+  const { width: screenWidth } = useWindowDimensions();
+
+  const current = SORT_OPTIONS.find((o) => o.id === value) ?? SORT_OPTIONS[0];
+  const MENU_WIDTH = 190;
+
+  const handleOpen = () => {
+    // วัดตำแหน่งปุ่มจริงบนจอก่อนเปิดเมนู เพื่อวางเมนูให้ตรงกับปุ่มเป๊ะๆ ไม่ว่าจะเลื่อนหน้าจอไปแค่ไหน
+    buttonRef.current?.measureInWindow((x, y, width, height) => {
+      setAnchor({ x, y, width, height });
+      setOpen(true);
+    });
+  };
+
+  return (
+    <View ref={buttonRef} collapsable={false}>
+      <TouchableOpacity
+        style={styles.sortButton}
+        activeOpacity={0.7}
+        onPress={handleOpen}
+      >
+        <Text style={styles.sortButtonText} numberOfLines={1}>
+          {current.label}
+        </Text>
+        <Text style={styles.sortButtonCaret}>{open ? "▲" : "▼"}</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.sortOverlay} onPress={() => setOpen(false)}>
+          {anchor && (
+            <View
+              style={[
+                styles.sortMenu,
+                {
+                  position: "absolute",
+                  top: anchor.y + anchor.height + 6,
+                  left: Math.min(
+                    Math.max(8, anchor.x + anchor.width - MENU_WIDTH),
+                    screenWidth - MENU_WIDTH - 8
+                  ),
+                  width: MENU_WIDTH,
+                },
+              ]}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.id}
+                  style={[
+                    styles.sortMenuItem,
+                    option.id === value && styles.sortMenuItemActive,
+                  ]}
+                  onPress={() => {
+                    onChange(option.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.sortMenuItemText,
+                      option.id === value && styles.sortMenuItemTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+
+                  {option.id === value && (
+                    <Text style={styles.sortMenuItemCheck}>✓</Text>
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 // การ์ดสินค้าที่ "ยกตัวขึ้น" ตอนเอาเมาส์ไปชี้ (เว็บ) และยุบลงตอนกด (มือถือ)
 function HoverLiftCard({
   width,
+  onPress,
   children,
 }: {
   width: number;
+  onPress?: () => void;
   children: React.ReactNode;
 }) {
   const lift = useRef(new Animated.Value(0)).current;
@@ -438,6 +572,7 @@ function HoverLiftCard({
   return (
     <Pressable
       style={{ width }}
+      onPress={onPress}
       onHoverIn={() => animateTo(1)}
       onHoverOut={() => animateTo(0)}
       // เผื่อ react-native-web บาง version ที่ไม่ยิง onHoverIn/onHoverOut
@@ -461,11 +596,17 @@ function HoverLiftCard({
 
 interface Props {
   onEditProduct?: (product: Product) => void;
+  // เปิดหน้ารายละเอียดสินค้า (กดที่การ์ด)
+  onOpenProduct?: (product: Product) => void;
   // ควบคุมว่าแสดงปุ่ม "แก้ไข" / "ลบ" หรือไม่ (เฉพาะ admin เท่านั้น)
   canManage?: boolean;
 }
 
-export default function ProductListScreen({ onEditProduct, canManage = false }: Props) {
+export default function ProductListScreen({
+  onEditProduct,
+  onOpenProduct,
+  canManage = false,
+}: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -544,13 +685,28 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
     });
   }, [searchedProducts, selectedBrands, selectedPriceBands]);
 
+  // ===== เรียงลำดับสินค้า =====
+  const [sortId, setSortId] = useState<SortId>("newest");
+
+  const sortedProducts = useMemo(
+    () => sortProducts(filteredProducts, sortId),
+    [filteredProducts, sortId]
+  );
+
   // แปะป้าย Low / Mid / High ใหม่ทุกครั้งที่รายการสินค้าเปลี่ยน (เกณฑ์ตายตัว)
   const priceTierById = useMemo(
     () => classifyPricesByTier(products),
     [products]
   );
 
-  const loadProducts = async () => {
+  // ===== แจ้งเตือนสต๊อกต่ำ (เฉพาะ admin) =====
+  const [lowStockToastVisible, setLowStockToastVisible] = useState(false);
+  const lowStockCount = useMemo(
+    () => products.filter((p) => p.stock < 5).length,
+    [products]
+  );
+
+  const loadProducts = async ({ silent = false } = {}) => {
     try {
       setError("");
 
@@ -561,6 +717,17 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
       }
 
       setProducts(data);
+
+      // เด้ง toast แจ้งเตือนสต๊อกต่ำให้ admin เห็นทันทีตอนโหลด/รีเฟรชข้อมูลใหม่
+      if (canManage) {
+        const lowCount = data.filter(
+          (p: Product) => p.stock > 0 && p.stock < 5
+        ).length;
+
+        if (lowCount > 0 && !silent) {
+          setLowStockToastVisible(true);
+        }
+      }
     } catch (err: any) {
       console.error("Fetch products error:", err);
       setError(err.message || "Failed to load products");
@@ -572,6 +739,7 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
   // โหลดสินค้าอัตโนมัติเมื่อเปิดหน้า
   useEffect(() => {
     loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = async () => {
@@ -581,6 +749,7 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
   };
 
   const { refreshCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [addingId, setAddingId] = useState<number | null>(null);
   const [addedId, setAddedId] = useState<number | null>(null);
 
@@ -604,8 +773,13 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
   const renderProduct = ({ item }: { item: Product }) => {
     const tier = priceTierById.get(item.id);
 
+    const wishlisted = isWishlisted(item.id);
+
     return (
-      <HoverLiftCard width={cardWidth}>
+      <HoverLiftCard
+        width={cardWidth}
+        onPress={() => onOpenProduct && onOpenProduct(item)}
+      >
         <View style={styles.imageWrapper}>
           <Image
             source={{ uri: item.image_url }}
@@ -613,11 +787,40 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
             resizeMode="cover"
           />
 
+          <TouchableOpacity
+            style={styles.wishlistChip}
+            activeOpacity={0.7}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              toggleWishlist({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                image_url: item.image_url,
+                category: item.category,
+                stock: item.stock,
+                badge_status: item.badge_status,
+              });
+            }}
+          >
+            <Text
+              style={[
+                styles.wishlistChipIcon,
+                wishlisted && styles.wishlistChipIconActive,
+              ]}
+            >
+              {wishlisted ? "♥" : "♡"}
+            </Text>
+          </TouchableOpacity>
+
           {canManage && (
             <TouchableOpacity
               style={styles.editChip}
               activeOpacity={0.7}
-              onPress={() => onEditProduct && onEditProduct(item)}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onEditProduct && onEditProduct(item);
+              }}
             >
               <Text style={styles.editChipText}>แก้ไข</Text>
             </TouchableOpacity>
@@ -662,7 +865,10 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
             ]}
             activeOpacity={0.8}
             disabled={item.stock < 1 || addingId === item.id}
-            onPress={() => handleAddToCart(item)}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleAddToCart(item);
+            }}
           >
             {addingId === item.id ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -681,7 +887,10 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
             <TouchableOpacity
               style={styles.deleteLink}
               activeOpacity={0.7}
-              onPress={() => askDelete(item)}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                askDelete(item);
+              }}
               disabled={deletingId === item.id}
             >
               {deletingId === item.id ? (
@@ -697,13 +906,47 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
   };
 
   if (loading) {
+    // จำนวนคอลัมน์เดาจากความกว้างจอปัจจุบัน (ก่อนรู้ข้อมูลสินค้าจริง)
+    const skeletonColumns = getColumnCount(
+      isWideLayout ? width - FILTER_SIDEBAR_WIDTH : width
+    );
+    const skeletonWidth =
+      ((isWideLayout ? width - FILTER_SIDEBAR_WIDTH : width) -
+        CONTAINER_PADDING * 2 -
+        GRID_GAP * (skeletonColumns - 1)) /
+      skeletonColumns;
+    const skeletonRows = chunk(
+      Array.from({ length: skeletonColumns * 2 }),
+      skeletonColumns
+    );
+
     return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color="#111111" />
-        <Text style={styles.loadingText}>
-          Loading products...
-        </Text>
-      </SafeAreaView>
+      <View style={styles.container}>
+        <View style={[styles.hero, { height: width >= 1100 ? 640 : width >= 700 ? 480 : 340 }]} />
+
+        <View style={styles.bodyRow}>
+          {isWideLayout && <View style={styles.sidebar} />}
+
+          <View style={styles.content}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>All Products</Text>
+            </View>
+
+            <View style={styles.list}>
+              {skeletonRows.map((row, rowIndex) => (
+                <View key={rowIndex} style={styles.row}>
+                  {row.map((_, colIndex) => (
+                    <SkeletonCard
+                      key={colIndex}
+                      width={skeletonWidth}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
     );
   }
 
@@ -718,7 +961,7 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
         <TouchableOpacity
           style={styles.retryButton}
           activeOpacity={0.8}
-          onPress={loadProducts}
+          onPress={() => loadProducts()}
         >
           <Text style={styles.retryText}>
             Retry
@@ -761,7 +1004,9 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>All Products</Text>
 
-              <View style={{ flexDirection: "row", gap: 8 }}>
+              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                <SortDropdown value={sortId} onChange={setSortId} />
+
                 {/* บนจอแคบไม่มีที่พอสำหรับ sidebar เลยใช้ปุ่มเปิด/ปิดแผงตัวกรองแทน */}
                 {!isWideLayout && (
                   <TouchableOpacity
@@ -791,12 +1036,21 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
                 <TouchableOpacity
                   style={styles.refreshButton}
                   activeOpacity={0.7}
-                  onPress={loadProducts}
+                  onPress={() => loadProducts()}
                 >
                   <Text style={styles.refreshText}>Refresh</Text>
                 </TouchableOpacity>
               </View>
             </View>
+
+            {canManage && lowStockCount > 0 && (
+              <View style={styles.lowStockBanner}>
+                <Text style={styles.lowStockBannerIcon}>⚠️</Text>
+                <Text style={styles.lowStockBannerText}>
+                  มีสินค้าใกล้หมดสต๊อก {lowStockCount} รายการ (เหลือต่ำกว่า 5 ชิ้น)
+                </Text>
+              </View>
+            )}
 
             <View style={styles.searchWrapper}>
               <TextInput
@@ -832,13 +1086,13 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
 
             <Text style={styles.count}>
               {searchText || hasActiveFilters
-                ? `พบ ${filteredProducts.length} จาก ${products.length} รายการ`
+                ? `พบ ${sortedProducts.length} จาก ${products.length} รายการ`
                 : `${products.length} Products`}
             </Text>
 
             {/* GRID สินค้า: เรนเดอร์เป็นแถวๆ ธรรมดา ไม่ใช้ FlatList
                 เพื่อให้อยู่ใน ScrollView เดียวกับ hero และแผงตัวกรอง เลื่อนไปด้วยกันทั้งหน้า */}
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>
                   ไม่พบสินค้าที่ตรงกับ "{searchText}"
@@ -846,7 +1100,7 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
               </View>
             ) : (
               <View style={styles.list}>
-                {chunk(filteredProducts, numColumns).map((rowItems, rowIndex) => (
+                {chunk(sortedProducts, numColumns).map((rowItems, rowIndex) => (
                   <View key={rowIndex} style={styles.row}>
                     {rowItems.map((item) => (
                       <View key={item.id}>{renderProduct({ item })}</View>
@@ -880,6 +1134,13 @@ export default function ProductListScreen({ onEditProduct, canManage = false }: 
         destructive
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+
+      <Toast
+        visible={lowStockToastVisible}
+        tone="warning"
+        message={`มีสินค้าใกล้หมดสต๊อก ${lowStockCount} รายการ (เหลือต่ำกว่า 5 ชิ้น)`}
+        onHide={() => setLowStockToastVisible(false)}
       />
 
     </View>
@@ -1089,6 +1350,77 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
+  // ===== SORT DROPDOWN =====
+  sortButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    maxWidth: 200,
+  },
+
+  sortButtonText: {
+    fontWeight: "500",
+    fontSize: 13,
+    color: "#111111",
+  },
+
+  sortButtonCaret: {
+    fontSize: 9,
+    color: "#8A8A8A",
+  },
+
+  sortOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17,17,17,0.12)",
+  },
+
+  sortMenu: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#EDEDED",
+    paddingVertical: 6,
+    shadowColor: "#111111",
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+
+  sortMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  sortMenuItemActive: {
+    backgroundColor: "#F7F7F7",
+  },
+
+  sortMenuItemText: {
+    fontSize: 13,
+    color: "#333333",
+  },
+
+  sortMenuItemTextActive: {
+    fontWeight: "700",
+    color: "#111111",
+  },
+
+  sortMenuItemCheck: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111111",
+  },
+
   // ===== FILTER PANEL =====
   filterPanel: {
     marginBottom: 18,
@@ -1193,6 +1525,31 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
+  lowStockBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: CONTAINER_PADDING,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#FFF3F2",
+    borderWidth: 1,
+    borderColor: "#F0C4C2",
+  },
+
+  lowStockBannerIcon: {
+    fontSize: 14,
+  },
+
+  lowStockBannerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#B3413E",
+    flex: 1,
+  },
+
   searchWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -1288,6 +1645,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#111111",
+  },
+
+  wishlistChip: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  wishlistChipIcon: {
+    fontSize: 16,
+    color: "#111111",
+  },
+
+  wishlistChipIconActive: {
+    color: "#D2585F",
   },
 
   cardBody: {

@@ -149,9 +149,9 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
       location_text,
       badge_status,
       image_url,
+      description, // <-- เพิ่มบรรทัดนี้
     } = req.body;
 
-    // ตรวจสอบชื่อสินค้า
     if (!name || name.trim() === "") {
       return res.status(400).json({
         success: false,
@@ -159,28 +159,13 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
       });
     }
 
-    // จำนวนสินค้า
     const productStock = Number(stock) || 0;
-
-    // ราคาสินค้า
     const productPrice = Number(price) || 0;
-
-    // ข้อความ Stock
-    const productStockText =
-      stock_text || `${productStock} units`;
-
-    // สถานะ Stock
+    const productStockText = stock_text || `${productStock} units`;
     const productBadge =
-      badge_status ||
-      (productStock < 5
-        ? "Low in stock"
-        : "Available");
+      badge_status || (productStock < 5 ? "Low in stock" : "Available");
+    const productLocationCount = Number(location_count) || 0;
 
-    // จำนวน Location
-    const productLocationCount =
-      Number(location_count) || 0;
-
-    // INSERT
     const [result] = await pool.query(
       `
       INSERT INTO Inventory
@@ -190,12 +175,13 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
         price,
         stock_text,
         category,
+        description,
         location_count,
         location_text,
         badge_status,
         image_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         name.trim(),
@@ -203,6 +189,7 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
         productPrice,
         productStockText,
         category || "Mirrorless Camera",
+        description || "", // <-- เพิ่มบรรทัดนี้
         productLocationCount,
         location_text || "",
         productBadge,
@@ -210,16 +197,13 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
       ]
     );
 
-    // ส่งผลลัพธ์
     res.status(201).json({
       success: true,
       productId: result.insertId,
       message: "Product added successfully",
     });
-
   } catch (error) {
     console.error("❌ Add product error:", error);
-
     res.status(500).json({
       success: false,
       message: "Database error",
@@ -227,6 +211,92 @@ app.post("/api/products", authenticateToken, requireRole("admin"), async (req, r
     });
   }
 });
+
+/* -------------------- 2) PUT /api/products/:id -------------------- */
+
+app.put("/api/products/:id", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      name,
+      stock,
+      price,
+      stock_text,
+      category,
+      location_count,
+      location_text,
+      badge_status,
+      image_url,
+      description, // <-- เพิ่มบรรทัดนี้
+    } = req.body;
+
+    if (!name || name.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Product name is required",
+      });
+    }
+
+    const productStock = Number(stock) || 0;
+    const productPrice = Number(price) || 0;
+    const productStockText = stock_text || `${productStock} units`;
+    const productBadge =
+      badge_status || (productStock < 5 ? "Low in stock" : "Available");
+    const productLocationCount = Number(location_count) || 0;
+
+    const [result] = await pool.query(
+      `
+      UPDATE Inventory
+      SET
+        name = ?,
+        stock = ?,
+        price = ?,
+        stock_text = ?,
+        category = ?,
+        description = ?,
+        location_count = ?,
+        location_text = ?,
+        badge_status = ?,
+        image_url = ?
+      WHERE id = ?
+      `,
+      [
+        name.trim(),
+        productStock,
+        productPrice,
+        productStockText,
+        category || "Mirrorless Camera",
+        description || "", // <-- เพิ่มบรรทัดนี้
+        productLocationCount,
+        location_text || "",
+        productBadge,
+        image_url || "",
+        id,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+    });
+  } catch (error) {
+    console.error("❌ Update product error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: error.message,
+    });
+  }
+});
+
 
 // =========================
 // PUT Update Product (เฉพาะ admin)
@@ -560,6 +630,9 @@ app.delete("/api/cart/:productId", authenticateToken, async (req, res) => {
   }
 });
 
+// สถานะออเดอร์ที่ระบบยอมรับ (ตรงกับ Backend/sql/orders_status_migration.sql)
+const ORDER_STATUSES = ["pending", "shipping", "delivered", "cancelled"];
+
 // =========================
 // POST Checkout (จำลองการสั่งซื้อ: ตัดสต็อก + บันทึกประวัติ ไม่มีจ่ายเงินจริง)
 // =========================
@@ -681,7 +754,7 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
 app.get("/api/orders/my", authenticateToken, async (req, res) => {
   try {
     const [orders] = await pool.query(
-      "SELECT id, total_amount, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+      "SELECT id, total_amount, status, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
       [req.user.id]
     );
 
@@ -708,6 +781,203 @@ app.get("/api/orders/my", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// =========================
+// GET All Orders (เฉพาะ admin) — สำหรับหน้าจัดการออเดอร์
+// =========================
+app.get(
+  "/api/admin/orders",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [orders] = await pool.query(`
+        SELECT o.id, o.user_id, o.total_amount, o.status, o.created_at,
+               u.username
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        ORDER BY o.created_at DESC
+      `);
+
+      for (const order of orders) {
+        const [items] = await pool.query(
+          "SELECT product_id, product_name, price, quantity FROM order_items WHERE order_id = ?",
+          [order.id]
+        );
+
+        order.items = items;
+      }
+
+      res.json({
+        success: true,
+        data: orders,
+      });
+    } catch (error) {
+      console.error("❌ Get all orders error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =========================
+// PUT Update Order Status (เฉพาะ admin)
+// =========================
+app.put(
+  "/api/orders/:id/status",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!ORDER_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `status ต้องเป็นหนึ่งใน: ${ORDER_STATUSES.join(", ")}`,
+        });
+      }
+
+      const [result] = await pool.query(
+        "UPDATE orders SET status = ? WHERE id = ?",
+        [status, id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "ไม่พบออเดอร์นี้",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "อัปเดตสถานะสำเร็จ",
+        data: { id: Number(id), status },
+      });
+    } catch (error) {
+      console.error("❌ Update order status error:", error);
+
+      // เผื่อยังไม่ได้รัน migration เพิ่มคอลัมน์ status ใน DB
+      if (error.code === "ER_BAD_FIELD_ERROR") {
+        return res.status(500).json({
+          success: false,
+          message:
+            "ยังไม่มีคอลัมน์ status ในตาราง orders — กรุณารัน Backend/sql/orders_status_migration.sql ก่อน",
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =========================
+// GET Admin Dashboard Summary (เฉพาะ admin)
+// ยอดขายรวม / วันนี้ / ย้อนหลัง 7 วัน + สินค้าใกล้หมดสต๊อก + สินค้าขายดี
+// =========================
+app.get(
+  "/api/admin/dashboard",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [[totals]] = await pool.query(
+        `SELECT
+           COALESCE(SUM(total_amount), 0) AS total_revenue,
+           COUNT(*) AS total_orders
+         FROM orders`
+      );
+
+      const [[todayTotals]] = await pool.query(
+        `SELECT
+           COALESCE(SUM(total_amount), 0) AS today_revenue,
+           COUNT(*) AS today_orders
+         FROM orders
+         WHERE DATE(created_at) = CURDATE()`
+      );
+
+      const [salesByDay] = await pool.query(
+        `SELECT
+           DATE(created_at) AS day,
+           COALESCE(SUM(total_amount), 0) AS revenue,
+           COUNT(*) AS orders
+         FROM orders
+         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+         GROUP BY DATE(created_at)
+         ORDER BY day ASC`
+      );
+
+      const [lowStock] = await pool.query(
+        `SELECT id, name, stock, category, image_url, badge_status
+         FROM Inventory
+         WHERE stock < 5
+         ORDER BY stock ASC`
+      );
+
+      const [[inventoryTotals]] = await pool.query(
+        `SELECT
+           COUNT(*) AS product_count,
+           COALESCE(SUM(stock * price), 0) AS stock_value
+         FROM Inventory`
+      );
+
+      const [topProducts] = await pool.query(
+        `SELECT
+           oi.product_id,
+           -- ใช้ชื่อสินค้าปัจจุบันจาก Inventory ถ้ายังไม่ถูกลบ ไม่งั้น fallback เป็นชื่อ ณ ตอนสั่งซื้อล่าสุด
+           COALESCE(i.name, MAX(oi.product_name)) AS product_name,
+           SUM(oi.quantity) AS units_sold,
+           SUM(oi.price * oi.quantity) AS revenue
+         FROM order_items oi
+         LEFT JOIN Inventory i ON i.id = oi.product_id
+         GROUP BY oi.product_id, i.name
+         ORDER BY units_sold DESC
+         LIMIT 5`
+      );
+
+      res.json({
+        success: true,
+        data: {
+          total_revenue: Number(totals.total_revenue),
+          total_orders: totals.total_orders,
+          today_revenue: Number(todayTotals.today_revenue),
+          today_orders: todayTotals.today_orders,
+          product_count: inventoryTotals.product_count,
+          stock_value: Number(inventoryTotals.stock_value),
+          sales_by_day: salesByDay.map((row) => ({
+            day: row.day,
+            revenue: Number(row.revenue),
+            orders: row.orders,
+          })),
+          low_stock: lowStock,
+          top_products: topProducts.map((row) => ({
+            ...row,
+            units_sold: Number(row.units_sold),
+            revenue: Number(row.revenue),
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("❌ Get dashboard error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // =========================
 // Start Server
