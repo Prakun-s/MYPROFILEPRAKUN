@@ -1,14 +1,16 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
   isMobile?: boolean;
+  onPress?: () => void;
 }
 
 // โลโก้ร้าน: วงกลมสีเทาเข้ม ใส่ตัวอักษรย่อ ("P") ไว้ข้างหน้าชื่อร้าน
 // ให้ดูเป็นแบรนด์มากขึ้น แยกออกมาเป็นไฟล์เดี่ยว จะได้ปรับแก้ทีหลังง่ายๆ
-export default function ShopLogo({ isMobile }: Props) {
-  return (
-    <View style={styles.wrapper}>
+// กดที่โลโก้/ชื่อร้านแล้วกลับไปหน้าแสดงสินค้าได้ (ถ้ามี onPress ส่งเข้ามา)
+export default function ShopLogo({ isMobile, onPress }: Props) {
+  const content = (
+    <>
       <View style={[styles.badge, isMobile && styles.badgeMobile]}>
         <Text style={[styles.badgeText, isMobile && styles.badgeTextMobile]}>
           P
@@ -18,8 +20,22 @@ export default function ShopLogo({ isMobile }: Props) {
       <Text style={styles.title}>
         {isMobile ? "PRAKUN" : "PRAKUN SHOP"}
       </Text>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        style={styles.wrapper}
+        activeOpacity={0.7}
+        onPress={onPress}
+      >
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={styles.wrapper}>{content}</View>;
 }
 
 const styles = StyleSheet.create({

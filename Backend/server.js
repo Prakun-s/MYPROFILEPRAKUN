@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const authRouter = require("./src/routes/auth");
 const { authenticateToken, requireRole } = require("./src/middleware/auth");
+const { calculateCoinsWithAI } = require("./src/coinCalculator");
 
 const app = express();
 
@@ -633,11 +634,19 @@ app.delete("/api/cart/:productId", authenticateToken, async (req, res) => {
 // สถานะออเดอร์ที่ระบบยอมรับ (ตรงกับ Backend/sql/orders_status_migration.sql)
 const ORDER_STATUSES = ["pending", "shipping", "delivered", "cancelled"];
 
+// วิธีชำระเงินที่ระบบยอมรับ (ตรงกับ Backend/sql/orders_payment_method.sql)
+// เป็นการจำลองเท่านั้น ไม่มีการเชื่อมต่อ payment gateway จริง
+const PAYMENT_METHODS = ["cod", "bank_transfer", "promptpay", "credit_card"];
+
 // =========================
 // POST Checkout (จำลองการสั่งซื้อ: ตัดสต็อก + บันทึกประวัติ ไม่มีจ่ายเงินจริง)
 // =========================
 app.post("/api/checkout", authenticateToken, async (req, res) => {
   const connection = await pool.getConnection();
+
+  const paymentMethod = PAYMENT_METHODS.includes(req.body.payment_method)
+    ? req.body.payment_method
+    : "cod";
 
   try {
     await connection.beginTransaction();
@@ -689,8 +698,8 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
     );
 
     const [orderResult] = await connection.query(
-      "INSERT INTO orders (user_id, total_amount) VALUES (?, ?)",
-      [req.user.id, totalAmount]
+      "INSERT INTO orders (user_id, total_amount, payment_method) VALUES (?, ?, ?)",
+      [req.user.id, totalAmount, paymentMethod]
     );
 
     const orderId = orderResult.insertId;
@@ -725,6 +734,38 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
     await connection.commit();
     connection.release();
 
+    // คำนวณเหรียญสะสมด้วย AI (อยู่นอก transaction ของออเดอร์แล้ว เพื่อไม่ถือ lock ระหว่างรอ AI ตอบ)
+    // ถ้าขั้นตอนนี้พลาดไป ออเดอร์ก็ยังถือว่าสำเร็จอยู่ดี แค่ไม่ได้เหรียญรอบนี้
+    let coinsEarned = 0;
+
+    try {
+      const coinResult = await calculateCoinsWithAI(totalAmount);
+      coinsEarned = coinResult.coins;
+
+      await pool.query(
+        `
+        INSERT INTO coin_transactions (user_id, order_id, coins, order_total, reasoning, calc_source)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          req.user.id,
+          orderId,
+          coinResult.coins,
+          totalAmount,
+          coinResult.reasoning,
+          coinResult.source,
+        ]
+      );
+
+      await pool.query(
+        "UPDATE users SET coin_balance = coin_balance + ? WHERE id = ?",
+        [coinResult.coins, req.user.id]
+      );
+    } catch (coinError) {
+      console.error("⚠️ Award coins error (order still succeeded):", coinError);
+      coinsEarned = 0;
+    }
+
     res.status(201).json({
       success: true,
       message: "สั่งซื้อสำเร็จ",
@@ -732,6 +773,8 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
         id: orderId,
         total_amount: totalAmount,
         item_count: cartRows.length,
+        coins_earned: coinsEarned,
+        payment_method: paymentMethod,
       },
     });
   } catch (error) {
@@ -739,6 +782,14 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
     connection.release();
 
     console.error("❌ Checkout error:", error);
+
+    if (error.code === "ER_BAD_FIELD_ERROR") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "ยังไม่มีคอลัมน์ payment_method ในตาราง orders — กรุณารัน Backend/sql/orders_payment_method.sql ก่อน",
+      });
+    }
 
     res.status(500).json({
       success: false,
@@ -754,7 +805,7 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
 app.get("/api/orders/my", authenticateToken, async (req, res) => {
   try {
     const [orders] = await pool.query(
-      "SELECT id, total_amount, status, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+      "SELECT id, total_amount, status, payment_method, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
       [req.user.id]
     );
 
@@ -792,7 +843,7 @@ app.get(
   async (req, res) => {
     try {
       const [orders] = await pool.query(`
-        SELECT o.id, o.user_id, o.total_amount, o.status, o.created_at,
+        SELECT o.id, o.user_id, o.total_amount, o.status, o.payment_method, o.created_at,
                u.username
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
@@ -880,6 +931,261 @@ app.put(
     }
   }
 );
+
+// =========================
+// Claims (เคลมสินค้า)
+// =========================
+const CLAIM_REASONS = [
+  "damaged",
+  "wrong_item",
+  "missing_item",
+  "not_as_described",
+  "fake",
+  "other",
+];
+
+const CLAIM_STATUSES = ["pending", "approved", "rejected", "completed"];
+
+// POST สร้างคำขอเคลมใหม่ (ต้อง login)
+app.post("/api/claims", authenticateToken, async (req, res) => {
+  try {
+    const {
+      order_id,
+      product_id,
+      product_name,
+      quantity,
+      reason,
+      description,
+      image_url,
+      contact_phone,
+    } = req.body;
+
+    if (!order_id || !product_id || !product_name) {
+      return res.status(400).json({
+        success: false,
+        message: "ข้อมูลสินค้า/คำสั่งซื้อไม่ครบถ้วน",
+      });
+    }
+
+    if (!CLAIM_REASONS.includes(reason)) {
+      return res.status(400).json({
+        success: false,
+        message: `reason ต้องเป็นหนึ่งใน: ${CLAIM_REASONS.join(", ")}`,
+      });
+    }
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณาระบุรายละเอียดปัญหาที่พบ",
+      });
+    }
+
+    // ต้องเป็นออเดอร์ของผู้ใช้ที่ login อยู่จริงเท่านั้น
+    const [orderRows] = await pool.query(
+      "SELECT id FROM orders WHERE id = ? AND user_id = ?",
+      [order_id, req.user.id]
+    );
+
+    if (orderRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "ไม่พบคำสั่งซื้อนี้ในบัญชีของคุณ",
+      });
+    }
+
+    const [result] = await pool.query(
+      `
+      INSERT INTO claims
+        (user_id, order_id, product_id, product_name, quantity, reason, description, image_url, contact_phone)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        req.user.id,
+        order_id,
+        product_id,
+        product_name,
+        quantity || 1,
+        reason,
+        description.trim(),
+        image_url || null,
+        contact_phone || null,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "ส่งคำขอเคลมสำเร็จ",
+      data: { id: result.insertId, status: "pending" },
+    });
+  } catch (error) {
+    console.error("❌ Create claim error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "ยังไม่มีตาราง claims — กรุณารัน Backend/sql/claims.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: error.message,
+    });
+  }
+});
+
+// GET ประวัติการเคลมของผู้ใช้ที่ login อยู่
+app.get("/api/claims/my", authenticateToken, async (req, res) => {
+  try {
+    const [claims] = await pool.query(
+      `SELECT id, order_id, product_id, product_name, quantity, reason,
+              description, image_url, contact_phone, status, admin_note, created_at
+       FROM claims
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: claims,
+    });
+  } catch (error) {
+    console.error("❌ Get my claims error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: error.message,
+    });
+  }
+});
+
+// GET รายการเคลมทั้งหมด (เฉพาะ admin)
+app.get(
+  "/api/admin/claims",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [claims] = await pool.query(
+        `SELECT c.id, c.order_id, c.product_id, c.product_name, c.quantity, c.reason,
+                c.description, c.image_url, c.contact_phone, c.status, c.admin_note,
+                c.created_at, c.updated_at, u.username
+         FROM claims c
+         LEFT JOIN users u ON u.id = c.user_id
+         ORDER BY c.created_at DESC`
+      );
+
+      res.json({
+        success: true,
+        data: claims,
+      });
+    } catch (error) {
+      console.error("❌ Get all claims error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// PUT อัปเดตสถานะคำขอเคลม (เฉพาะ admin)
+app.put(
+  "/api/admin/claims/:id/status",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, admin_note } = req.body;
+
+      if (!CLAIM_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `status ต้องเป็นหนึ่งใน: ${CLAIM_STATUSES.join(", ")}`,
+        });
+      }
+
+      const [result] = await pool.query(
+        "UPDATE claims SET status = ?, admin_note = ? WHERE id = ?",
+        [status, admin_note || null, id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "ไม่พบคำขอเคลมนี้",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "อัปเดตสถานะการเคลมสำเร็จ",
+        data: { id: Number(id), status },
+      });
+    } catch (error) {
+      console.error("❌ Update claim status error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =========================
+// GET เหรียญสะสมของผู้ใช้ที่ login อยู่ (ยอดคงเหลือ + ประวัติการได้เหรียญ)
+// =========================
+app.get("/api/coins/my", authenticateToken, async (req, res) => {
+  try {
+    const [[user]] = await pool.query(
+      "SELECT coin_balance FROM users WHERE id = ?",
+      [req.user.id]
+    );
+
+    const [transactions] = await pool.query(
+      `SELECT id, order_id, coins, order_total, reasoning, calc_source AS source, created_at
+       FROM coin_transactions
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        coin_balance: user ? user.coin_balance : 0,
+        transactions,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get my coins error:", error);
+
+    if (error.code === "ER_BAD_FIELD_ERROR" || error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "ยังไม่มีระบบเหรียญสะสมในฐานข้อมูล — กรุณารัน Backend/sql/coins.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: error.message,
+    });
+  }
+});
 
 // =========================
 // GET Admin Dashboard Summary (เฉพาะ admin)

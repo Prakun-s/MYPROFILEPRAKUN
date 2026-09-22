@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import { checkout, fetchCart, removeFromCart, updateCartItem } from "./api";
+import { fetchCart, removeFromCart, updateCartItem } from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
+import Receipt, { ReceiptItem } from "./components/Receipt";
 import { useCart } from "./context/CartContext";
+import { useCoins } from "./context/CoinContext";
+import OrderConfirmScreen from "./OrderConfirmScreen";
 
 interface CartItem {
   cart_item_id: number;
@@ -30,21 +34,34 @@ interface Props {
   onViewOrders?: () => void;
 }
 
-export default function CartScreen({ onBack, onViewOrders }: Props) {
+// เปิดให้หน้าหลัก (ปุ่ม "← กลับ" บน top bar) เรียก goBack() ก่อนออกจากหน้านี้
+// คืนค่า true = จัดการ "ย้อนกลับ" ภายในหน้านี้แล้ว (เช่น จากหน้ายืนยันคำสั่งซื้อ กลับไปตะกร้า)
+// คืนค่า false = ให้หน้าหลักจัดการออกจากหน้านี้เอง
+export interface CartScreenHandle {
+  goBack: () => boolean;
+}
+
+const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
+  { onBack, onViewOrders },
+  ref
+) {
   const { refreshCart } = useCart();
+  const { refreshCoins } = useCoins();
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CartItem | null>(null);
-  const [checkoutDialogVisible, setCheckoutDialogVisible] = useState(false);
-  const [checkingOut, setCheckingOut] = useState(false);
-  const [checkoutError, setCheckoutError] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
   const [successOrder, setSuccessOrder] = useState<{
     id: number;
     total_amount: number;
     item_count: number;
+    coins_earned?: number;
+    payment_method?: string;
+    created_at: string;
+    items: ReceiptItem[];
   } | null>(null);
 
   const loadCart = async () => {
@@ -118,23 +135,45 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
     0
   );
 
-  const handleCheckout = async () => {
-    setCheckoutDialogVisible(false);
-    setCheckoutError("");
-    setCheckingOut(true);
+  // เรียกตอน OrderConfirmScreen เช็คเอาท์สำเร็จแล้ว (payment method เลือกไว้แล้วในนั้น)
+  const handleConfirmed = (order: {
+    id: number;
+    total_amount: number;
+    item_count: number;
+    coins_earned?: number;
+    payment_method?: string;
+  }) => {
+    // เก็บ snapshot รายการสินค้าในตะกร้าไว้ก่อน เพราะพอเช็คเอาท์สำเร็จ items จะถูกเคลียร์เป็น []
+    // ใบเสร็จหลังสั่งซื้อสำเร็จจะได้มีรายการสินค้าให้แสดงครบ
+    const itemsSnapshot: ReceiptItem[] = items.map((item) => ({
+      product_name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+    }));
 
-    try {
-      const result = await checkout();
-      setSuccessOrder(result.order);
-      setItems([]);
-      refreshCart();
-    } catch (err: any) {
-      console.error("Checkout error:", err);
-      setCheckoutError(err.message || "สั่งซื้อไม่สำเร็จ");
-    } finally {
-      setCheckingOut(false);
-    }
+    setSuccessOrder({
+      ...order,
+      created_at: new Date().toISOString(),
+      items: itemsSnapshot,
+    });
+    setShowConfirm(false);
+    setItems([]);
+    refreshCart();
+    refreshCoins();
   };
+
+  // เปิดให้หน้าหลักเรียก goBack() ก่อน: จากหน้ายืนยันคำสั่งซื้อ ให้กลับมาตะกร้าก่อน
+  // ไม่ใช่ออกจากตะกร้าไปเลย ส่วนหน้าตะกร้าปกติ/หน้าสำเร็จ ให้หน้าหลักจัดการเอง
+  useImperativeHandle(ref, () => ({
+    goBack: () => {
+      if (showConfirm) {
+        setShowConfirm(false);
+        return true;
+      }
+
+      return false;
+    },
+  }));
 
   if (loading) {
     return (
@@ -146,18 +185,23 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
 
   if (successOrder) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.successIcon}>✓</Text>
+      <ScrollView
+        style={styles.successScroll}
+        contentContainerStyle={styles.successContent}
+      >
+        <View style={styles.successHeader}>
+          <Text style={styles.successIcon}>✓</Text>
+          <Text style={styles.successTitle}>สั่งซื้อสำเร็จ</Text>
+        </View>
 
-        <Text style={styles.successTitle}>สั่งซื้อสำเร็จ</Text>
-
-        <Text style={styles.successText}>
-          คำสั่งซื้อ #{successOrder.id} · {successOrder.item_count} รายการ
-        </Text>
-
-        <Text style={styles.successTotal}>
-          ฿{Number(successOrder.total_amount).toLocaleString("th-TH")}
-        </Text>
+        <Receipt
+          orderId={successOrder.id}
+          createdAt={successOrder.created_at}
+          items={successOrder.items}
+          totalAmount={successOrder.total_amount}
+          coinsEarned={successOrder.coins_earned}
+          paymentMethod={successOrder.payment_method}
+        />
 
         <TouchableOpacity
           style={styles.primaryButton}
@@ -172,7 +216,22 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
             <Text style={styles.linkText}>ดูประวัติการสั่งซื้อ</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </ScrollView>
+    );
+  }
+
+  if (showConfirm) {
+    return (
+      <OrderConfirmScreen
+        items={items.map((item) => ({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        }))}
+        totalAmount={total}
+        onBack={() => setShowConfirm(false)}
+        onConfirmed={handleConfirmed}
+      />
     );
   }
 
@@ -260,10 +319,6 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
 
       {items.length > 0 && (
         <View style={styles.summaryBar}>
-          {checkoutError ? (
-            <Text style={styles.checkoutError}>{checkoutError}</Text>
-          ) : null}
-
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>ยอดรวม</Text>
             <Text style={styles.summaryTotal}>
@@ -272,19 +327,11 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.checkoutButton,
-              checkingOut && styles.checkoutButtonDisabled,
-            ]}
+            style={styles.checkoutButton}
             activeOpacity={0.8}
-            disabled={checkingOut}
-            onPress={() => setCheckoutDialogVisible(true)}
+            onPress={() => setShowConfirm(true)}
           >
-            {checkingOut ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.checkoutButtonText}>สั่งซื้อ</Text>
-            )}
+            <Text style={styles.checkoutButtonText}>ดำเนินการสั่งซื้อ</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -301,21 +348,11 @@ export default function CartScreen({ onBack, onViewOrders }: Props) {
         onCancel={() => setRemoveTarget(null)}
         onConfirm={confirmRemove}
       />
-
-      <ConfirmDialog
-        visible={checkoutDialogVisible}
-        title="ยืนยันการสั่งซื้อ"
-        message={`ยอดรวมทั้งหมด ฿${total.toLocaleString(
-          "th-TH"
-        )} — นี่เป็นการจำลองการสั่งซื้อ ไม่มีการชำระเงินจริง`}
-        confirmText="ยืนยันสั่งซื้อ"
-        cancelText="ยกเลิก"
-        onCancel={() => setCheckoutDialogVisible(false)}
-        onConfirm={handleCheckout}
-      />
     </View>
   );
-}
+});
+
+export default CartScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -449,12 +486,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  checkoutError: {
-    fontSize: 12,
-    color: "#B3413E",
-    marginBottom: 8,
-  },
-
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -480,10 +511,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  checkoutButtonDisabled: {
-    opacity: 0.6,
-  },
-
   checkoutButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
@@ -494,6 +521,21 @@ const styles = StyleSheet.create({
     fontSize: 40,
     color: "#111111",
     marginBottom: 12,
+  },
+
+  successScroll: {
+    flex: 1,
+    backgroundColor: "#FAFAFA",
+  },
+
+  successContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  successHeader: {
+    alignItems: "center",
+    marginBottom: 20,
   },
 
   successTitle: {
@@ -516,12 +558,31 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
+  coinsEarnedBadge: {
+    backgroundColor: "#FFF6E0",
+    borderWidth: 1,
+    borderColor: "#F0DFAE",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 24,
+    marginTop: -12,
+  },
+
+  coinsEarnedText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#8A6A00",
+  },
+
   primaryButton: {
     backgroundColor: "#111111",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
+    marginTop: 20,
     marginBottom: 12,
+    alignItems: "center",
   },
 
   primaryButtonText: {
@@ -535,5 +596,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111111",
     textDecorationLine: "underline",
+    textAlign: "center",
   },
 });

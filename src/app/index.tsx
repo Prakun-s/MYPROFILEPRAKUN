@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   StyleSheet,
@@ -9,13 +9,17 @@ import {
 } from "react-native";
 
 import AddProductScreen from "../AddProductScreen";
+import AdminClaimsScreen from "../AdminClaimsScreen";
 import AdminOrdersScreen from "../AdminOrdersScreen";
-import CartScreen from "../CartScreen";
+import CartScreen, { CartScreenHandle } from "../CartScreen";
+import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
+import CoinsScreen from "../CoinsScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ShopLogo from "../components/ShopLogo";
 import UserMenu from "../components/UserMenu";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useCoins } from "../context/CoinContext";
 import { useWishlist } from "../context/WishlistContext";
 import DashboardScreen from "../DashboardScreen";
 import EditProductScreen from "../EditProductScreen";
@@ -37,9 +41,23 @@ interface Product {
   image_url: string;
 }
 
+interface ClaimOrderItem {
+  product_id: number;
+  product_name: string;
+  price: number;
+  quantity: number;
+}
+
+interface ClaimOrder {
+  id: number;
+  total_amount: number;
+  created_at: string;
+}
+
 export default function HomeScreen() {
   const { user, isAdmin, logout } = useAuth();
   const { cartCount } = useCart();
+  const { coinBalance } = useCoins();
   const { items: wishlistItems } = useWishlist();
   const { width } = useWindowDimensions();
   // จอแคบ (มือถือ) < 640 → ยุบส่วนหัวให้กระชับ เตรียมไว้สำหรับตอนแตกเป็นแอปมือถือ
@@ -54,9 +72,22 @@ export default function HomeScreen() {
     | "wishlist"
     | "dashboard"
     | "adminOrders"
+    | "adminClaims"
+    | "claim"
+    | "coins"
   >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
+  const [claimTarget, setClaimTarget] = useState<{
+    order: ClaimOrder;
+    item: ClaimOrderItem;
+  } | null>(null);
+  // จำหน้าที่กดเข้ามาเคลมสินค้าไว้ เพื่อให้ปุ่ม "← กลับ" ย้อนไปหน้านั้นแทนที่จะไปหน้า Products เสมอ
+  const [claimOrigin, setClaimOrigin] = useState<"products" | "orders">(
+    "products"
+  );
+  const claimScreenRef = useRef<ClaimScreenHandle>(null);
+  const cartScreenRef = useRef<CartScreenHandle>(null);
 
   // Alert.alert ของ React Native ไม่ทำงานบนเว็บ (react-native-web มองว่าเป็น no-op)
   // จึงใช้ ConfirmDialog (สร้างจาก Modal ที่รองรับเว็บจริง) แทน
@@ -76,7 +107,7 @@ export default function HomeScreen() {
   // ผู้ใช้ role "user" ไม่มีสิทธิ์เข้าหน้าเพิ่ม/แก้ไขสินค้า
   // (กันไว้อีกชั้นแม้ปุ่มจะถูกซ่อนไปแล้ว)
   useEffect(() => {
-    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders") && !isAdmin) {
+    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders" || screen === "adminClaims") && !isAdmin) {
       setScreen("products");
     }
   }, [screen, isAdmin]);
@@ -149,7 +180,13 @@ export default function HomeScreen() {
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => setScreen("products")}
+            onPress={() => {
+              const handledInternally = cartScreenRef.current?.goBack();
+
+              if (!handledInternally) {
+                setScreen("products");
+              }
+            }}
           >
             <Text style={styles.backText}>
               ← Products
@@ -163,6 +200,7 @@ export default function HomeScreen() {
 
         <View style={styles.content}>
           <CartScreen
+            ref={cartScreenRef}
             onBack={() => setScreen("products")}
             onViewOrders={() => setScreen("orders")}
           />
@@ -192,7 +230,80 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.content}>
-          <OrdersScreen />
+          <OrdersScreen
+            onClaimItem={(order, item) => {
+              setClaimTarget({ order, item });
+              setClaimOrigin("orders");
+              setScreen("claim");
+            }}
+          />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "coins") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>เหรียญสะสม</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <CoinsScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "claim") {
+  return (
+    <View style={styles.container}>
+
+      <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            // ลองให้หน้าเคลมย้อนกลับภายในตัวเองก่อน (เช่น จากฟอร์ม กลับไปหน้าเลือกสินค้า)
+            // ถ้าไม่มีอะไรให้ย้อนแล้ว ค่อยออกจากหน้านี้กลับไปหน้าที่กดเข้ามา
+            const handledInternally = claimScreenRef.current?.goBack();
+
+            if (!handledInternally) {
+              setScreen(claimOrigin);
+              setClaimTarget(null);
+            }
+          }}
+        >
+          
+            <Text style={styles.backText}>
+              {claimOrigin === "orders" ? "← ประวัติการสั่งซื้อ" : "← Products"}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>เคลมสินค้า</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <ClaimScreen
+          ref={claimScreenRef}
+          order={claimTarget?.order} 
+          item={claimTarget?.item} />
         </View>
 
       </View>
@@ -321,6 +432,33 @@ export default function HomeScreen() {
     );
   }
 
+  if (screen === "adminClaims" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>จัดการคำขอเคลม</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <AdminClaimsScreen />
+        </View>
+
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
 
@@ -328,7 +466,14 @@ export default function HomeScreen() {
       <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
 
         <View style={styles.headerLeft}>
-          <ShopLogo isMobile={isMobile} />
+          <ShopLogo
+            isMobile={isMobile}
+            onPress={() => {
+              setSelectedProduct(null);
+              setClaimTarget(null);
+              setScreen("products");
+            }}
+          />
         </View>
 
         <View style={styles.headerRight}>
@@ -347,6 +492,22 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.iconButton}
             activeOpacity={0.6}
+            onPress={() => setScreen("coins")}
+          >
+            <Text style={styles.cartIconText}>🪙</Text>
+
+            {coinBalance > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {coinBalance > 99 ? "99+" : coinBalance}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.6}
             onPress={() => setScreen("wishlist")}
           >
             <Text style={styles.cartIconText}>♡</Text>
@@ -359,6 +520,18 @@ export default function HomeScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+<TouchableOpacity
+  style={styles.iconButton}
+  activeOpacity={0.6}
+  onPress={() => {
+    setClaimTarget(null);
+    setClaimOrigin("products");
+    setScreen("claim");
+  }}
+>
+  <Text style={styles.cartIconText}>📋</Text>
+</TouchableOpacity>
 
           <TouchableOpacity
             style={styles.cartIconButton}
@@ -383,7 +556,9 @@ export default function HomeScreen() {
             isAdmin={isAdmin}
             onDashboard={() => setScreen("dashboard")}
             onAdminOrders={() => setScreen("adminOrders")}
+            onAdminClaims={() => setScreen("adminClaims")}
             onOrders={() => setScreen("orders")}
+            onCoins={() => setScreen("coins")}
             onLogout={confirmLogout}
           />
         </View>

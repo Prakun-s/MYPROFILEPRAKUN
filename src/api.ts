@@ -187,10 +187,11 @@ export async function removeFromCart(productId: number) {
 
 // ===== Checkout / Orders =====
 
-export async function checkout() {
+export async function checkout(paymentMethod: string = "cod") {
   const response = await fetch(`${API_URL}/api/checkout`, {
     method: "POST",
     headers: await authHeaders(),
+    body: JSON.stringify({ payment_method: paymentMethod }),
   });
 
   const result = await response.json();
@@ -246,6 +247,137 @@ export async function updateOrderStatus(orderId: number, status: string) {
   }
 
   return result;
+}
+
+// ===== Claims (เคลมสินค้า) =====
+
+export type ClaimReason =
+  | "damaged"
+  | "wrong_item"
+  | "missing_item"
+  | "not_as_described"
+  | "fake"
+  | "other";
+
+export type ClaimStatus = "pending" | "approved" | "rejected" | "completed";
+
+export interface ClaimRecord {
+  id: number;
+  order_id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  reason: ClaimReason;
+  description: string;
+  image_url?: string | null;
+  contact_phone?: string | null;
+  status: ClaimStatus;
+  admin_note?: string | null;
+  created_at: string;
+  updated_at?: string;
+  username?: string;
+}
+
+export async function submitClaim(claim: {
+  order_id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  reason: ClaimReason;
+  description: string;
+  image_url?: string;
+  contact_phone?: string;
+}) {
+  const response = await fetch(`${API_URL}/api/claims`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(claim),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ส่งคำขอเคลมไม่สำเร็จ");
+  }
+
+  return result;
+}
+
+export async function fetchMyClaims(): Promise<ClaimRecord[]> {
+  const response = await fetch(`${API_URL}/api/claims/my`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดประวัติการเคลมได้");
+  }
+
+  return result.data;
+}
+
+export async function fetchAllClaims(): Promise<ClaimRecord[]> {
+  const response = await fetch(`${API_URL}/api/admin/claims`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดรายการเคลมได้");
+  }
+
+  return result.data;
+}
+
+export async function updateClaimStatus(
+  claimId: number,
+  status: ClaimStatus,
+  adminNote?: string
+) {
+  const response = await fetch(`${API_URL}/api/admin/claims/${claimId}/status`, {
+    method: "PUT",
+    headers: await authHeaders(),
+    body: JSON.stringify({ status, admin_note: adminNote }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถอัปเดตสถานะการเคลมได้");
+  }
+
+  return result;
+}
+
+// ===== เหรียญสะสม (Coins) =====
+
+export interface CoinTransaction {
+  id: number;
+  order_id: number;
+  coins: number;
+  order_total: number;
+  reasoning?: string | null;
+  source: "ai" | "fallback";
+  created_at: string;
+}
+
+export async function fetchMyCoins(): Promise<{
+  coin_balance: number;
+  transactions: CoinTransaction[];
+}> {
+  const response = await fetch(`${API_URL}/api/coins/my`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดข้อมูลเหรียญสะสมได้");
+  }
+
+  return result.data;
 }
 
 // ===== Admin Dashboard =====

@@ -23,7 +23,9 @@ interface Props {
   isAdmin: boolean;
   onDashboard: () => void;
   onAdminOrders: () => void;
+  onAdminClaims: () => void;
   onOrders: () => void;
+  onCoins: () => void;
   onLogout: () => void;
 }
 
@@ -35,7 +37,9 @@ export default function UserMenu({
   isAdmin,
   onDashboard,
   onAdminOrders,
+  onAdminClaims,
   onOrders,
+  onCoins,
   onLogout,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -52,11 +56,18 @@ export default function UserMenu({
           icon: "📦",
           onPress: onAdminOrders,
         },
+        {
+          key: "adminClaims",
+          label: "จัดการคำขอเคลม",
+          icon: "🛠️",
+          onPress: onAdminClaims,
+        },
       ]
     : [];
 
   const accountActions: MenuAction[] = [
     { key: "orders", label: "ประวัติการสั่งซื้อ", icon: "🧾", onPress: onOrders },
+    { key: "coins", label: "เหรียญสะสม", icon: "🪙", onPress: onCoins },
     {
       key: "logout",
       label: "ออกจากระบบ",

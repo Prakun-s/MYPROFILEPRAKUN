@@ -5,10 +5,12 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
 import { fetchMyOrders } from "./api";
+import ReceiptModal from "./components/ReceiptModal";
 
 interface OrderItem {
   product_id: number;
@@ -21,6 +23,7 @@ interface Order {
   id: number;
   total_amount: number;
   status?: "pending" | "shipping" | "delivered" | "cancelled";
+  payment_method?: string;
   created_at: string;
   items: OrderItem[];
 }
@@ -50,10 +53,16 @@ function getShippingStatus(order: Order) {
   return STATUS_META.delivered;
 }
 
-export default function OrdersScreen() {
+interface OrdersScreenProps {
+  // เรียกตอนกดปุ่ม "เคลมสินค้า" ของรายการในออเดอร์ที่จัดส่งสำเร็จแล้ว
+  onClaimItem?: (order: Order, item: OrderItem) => void;
+}
+
+export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -86,11 +95,12 @@ export default function OrdersScreen() {
   }
 
   return (
-    <FlatList
-      data={orders}
-      keyExtractor={(order) => String(order.id)}
-      contentContainerStyle={styles.list}
-      renderItem={({ item: order }) => {
+    <>
+      <FlatList
+        data={orders}
+        keyExtractor={(order) => String(order.id)}
+        contentContainerStyle={styles.list}
+        renderItem={({ item: order }) => {
         const status = getShippingStatus(order);
 
         return (
@@ -124,14 +134,26 @@ export default function OrdersScreen() {
             </View>
 
             {order.items.map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                <Text style={styles.itemName} numberOfLines={1}>
-                  {item.product_name} × {item.quantity}
-                </Text>
+              <View key={index} style={styles.itemBlock}>
+                <View style={styles.itemRow}>
+                  <Text style={styles.itemName} numberOfLines={1}>
+                    {item.product_name} × {item.quantity}
+                  </Text>
 
-                <Text style={styles.itemPrice}>
-                  ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
-                </Text>
+                  <Text style={styles.itemPrice}>
+                    ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
+                  </Text>
+                </View>
+
+                {status.tone === "delivered" && onClaimItem && (
+                  <TouchableOpacity
+                    style={styles.claimButton}
+                    activeOpacity={0.7}
+                    onPress={() => onClaimItem(order, item)}
+                  >
+                    <Text style={styles.claimButtonText}>เคลมสินค้า</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
 
@@ -141,15 +163,36 @@ export default function OrdersScreen() {
                 ฿{Number(order.total_amount).toLocaleString("th-TH")}
               </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.receiptButton}
+              activeOpacity={0.7}
+              onPress={() => setReceiptOrder(order)}
+            >
+              <Text style={styles.receiptButtonText}>🧾 ดูใบเสร็จ</Text>
+            </TouchableOpacity>
           </View>
         );
-      }}
-      ListEmptyComponent={
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>ยังไม่มีประวัติการสั่งซื้อ</Text>
-        </View>
-      }
-    />
+        }}
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <Text style={styles.emptyText}>ยังไม่มีประวัติการสั่งซื้อ</Text>
+          </View>
+        }
+      />
+
+      {receiptOrder && (
+        <ReceiptModal
+          visible={!!receiptOrder}
+          orderId={receiptOrder.id}
+          createdAt={receiptOrder.created_at}
+          items={receiptOrder.items}
+          totalAmount={receiptOrder.total_amount}
+          paymentMethod={receiptOrder.payment_method}
+          onClose={() => setReceiptOrder(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -224,10 +267,31 @@ const styles = StyleSheet.create({
     color: "#8A8A8A",
   },
 
+  itemBlock: {
+    marginBottom: 6,
+  },
+
   itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 4,
+  },
+
+  claimButton: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#111111",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+
+  claimButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111111",
   },
 
   itemName: {
@@ -261,6 +325,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#111111",
+  },
+
+  receiptButton: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+  },
+
+  receiptButtonText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#4A4A4A",
   },
 
   error: {
