@@ -29,6 +29,7 @@ export async function addProduct(product: {
   stock: number;
   price: number;
   category: string;
+  description?: string;
   location_text: string;
   image_url: string;
 }) {
@@ -43,6 +44,7 @@ export async function addProduct(product: {
       price: product.price,
       stock_text: `${product.stock} units`,
       category: product.category,
+      description: product.description || "",
       location_count: product.location_text ? 1 : 0,
       location_text: product.location_text,
       badge_status:
@@ -69,6 +71,7 @@ export async function updateProduct(
     stock: number;
     price: number;
     category: string;
+    description?: string;
     location_text: string;
     image_url: string;
   }
@@ -84,6 +87,7 @@ export async function updateProduct(
       price: product.price,
       stock_text: `${product.stock} units`,
       category: product.category,
+      description: product.description || "",
       location_count: product.location_text ? 1 : 0,
       location_text: product.location_text,
       badge_status:
@@ -207,6 +211,54 @@ export async function fetchMyOrders() {
 
   if (!response.ok) {
     throw new Error(result.message || "Failed to fetch orders");
+  }
+
+  return result.data;
+}
+
+// ===== Admin Order Management =====
+
+export async function fetchAllOrders() {
+  const response = await fetch(`${API_URL}/api/admin/orders`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch orders");
+  }
+
+  return result.data;
+}
+
+export async function updateOrderStatus(orderId: number, status: string) {
+  const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
+    method: "PUT",
+    headers: await authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to update order status");
+  }
+
+  return result;
+}
+
+// ===== Admin Dashboard =====
+
+export async function fetchDashboardSummary() {
+  const response = await fetch(`${API_URL}/api/admin/dashboard`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch dashboard summary");
   }
 
   return result.data;
