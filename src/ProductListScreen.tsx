@@ -868,6 +868,7 @@ export default function ProductListScreen({
           <Text style={styles.price}>
             ฿{Number(item.price).toLocaleString("th-TH")}
           </Text>
+          <Text style={styles.vatNote}>ราคานี้รวม VAT 7% แล้ว</Text>
 
           <View style={styles.badgeGroup}>
             <Text
@@ -1721,6 +1722,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#111111",
+    marginBottom: 2,
+  },
+
+  vatNote: {
+    fontSize: 10.5,
+    color: "#B0B0B0",
     marginBottom: 8,
   },
 

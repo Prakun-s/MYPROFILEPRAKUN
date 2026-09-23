@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -47,6 +48,8 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
 ) {
   const { refreshCart } = useCart();
   const { refreshCoins } = useCoins();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +63,8 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
     item_count: number;
     coins_earned?: number;
     payment_method?: string;
+    discount_code?: string | null;
+    discount_amount?: number;
     created_at: string;
     items: ReceiptItem[];
   } | null>(null);
@@ -134,14 +139,20 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
     (sum, item) => sum + Number(item.price) * item.quantity,
     0
   );
+  // ราคาที่แสดงในร้านถือว่ารวม VAT แล้วตามกฎหมาย จึงแยกยอดก่อนภาษีไว้ดูเฉยๆ
+  // ไม่ได้บวกเพิ่มจากยอดที่เรียกเก็บจริง
+  const amountExVat = total / 1.07;
+  const vatAmount = total - amountExVat;
 
-  // เรียกตอน OrderConfirmScreen เช็คเอาท์สำเร็จแล้ว (payment method เลือกไว้แล้วในนั้น)
+  // เรียกตอน OrderConfirmScreen เช็คเอาท์สำเร็จแล้ว (payment method + โค้ดส่วนลดเลือกไว้แล้วในนั้น)
   const handleConfirmed = (order: {
     id: number;
     total_amount: number;
     item_count: number;
     coins_earned?: number;
     payment_method?: string;
+    discount_code?: string | null;
+    discount_amount?: number;
   }) => {
     // เก็บ snapshot รายการสินค้าในตะกร้าไว้ก่อน เพราะพอเช็คเอาท์สำเร็จ items จะถูกเคลียร์เป็น []
     // ใบเสร็จหลังสั่งซื้อสำเร็จจะได้มีรายการสินค้าให้แสดงครบ
@@ -201,6 +212,8 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
           totalAmount={successOrder.total_amount}
           coinsEarned={successOrder.coins_earned}
           paymentMethod={successOrder.payment_method}
+          discountCode={successOrder.discount_code}
+          discountAmount={successOrder.discount_amount}
         />
 
         <TouchableOpacity
@@ -235,92 +248,170 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <FlatList
-        data={items}
-        keyExtractor={(item) => String(item.cart_item_id)}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Image
-              source={{ uri: item.image_url }}
-              style={styles.image}
-              resizeMode="cover"
-            />
+  const cartList = (
+    <FlatList
+      style={isWide ? styles.wideListFlex : undefined}
+      data={items}
+      keyExtractor={(item) => String(item.cart_item_id)}
+      contentContainerStyle={isWide ? styles.wideList : styles.list}
+      renderItem={({ item }) => (
+        <View style={[styles.row, isWide && styles.rowWide]}>
+          <Image
+            source={{ uri: item.image_url }}
+            style={[styles.image, isWide && styles.imageWide]}
+            resizeMode="cover"
+          />
 
-            <View style={styles.rowInfo}>
-              <Text style={styles.name} numberOfLines={2}>
-                {item.name}
-              </Text>
-
-              <Text style={styles.price}>
-                ฿{Number(item.price).toLocaleString("th-TH")}
-              </Text>
-
-              <View style={styles.stepper}>
-                <TouchableOpacity
-                  style={styles.stepButton}
-                  activeOpacity={0.7}
-                  disabled={updatingId === item.product_id}
-                  onPress={() => changeQuantity(item, item.quantity - 1)}
-                >
-                  <Text style={styles.stepButtonText}>−</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.stepValue}>{item.quantity}</Text>
-
-                <TouchableOpacity
-                  style={styles.stepButton}
-                  activeOpacity={0.7}
-                  disabled={
-                    updatingId === item.product_id ||
-                    item.quantity >= item.stock
-                  }
-                  onPress={() => changeQuantity(item, item.quantity + 1)}
-                >
-                  <Text style={styles.stepButtonText}>+</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.removeLink}
-                  activeOpacity={0.7}
-                  onPress={() => setRemoveTarget(item)}
-                >
-                  <Text style={styles.removeLinkText}>ลบ</Text>
-                </TouchableOpacity>
-              </View>
-
-              {item.quantity >= item.stock && (
-                <Text style={styles.stockWarning}>
-                  มีสินค้าเหลือสูงสุด {item.stock} ชิ้น
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>ตะกร้าว่างเปล่า</Text>
-            <Text style={styles.emptyText}>
-              ยังไม่มีสินค้าในตะกร้า ลองเลือกซื้อสินค้าดูก่อนนะ
+          <View style={styles.rowInfo}>
+            <Text style={[styles.name, isWide && styles.nameWide]} numberOfLines={2}>
+              {item.name}
             </Text>
 
+            <Text style={[styles.price, isWide && styles.priceWide]}>
+              ฿{Number(item.price).toLocaleString("th-TH")}
+            </Text>
+
+            <View style={styles.stepper}>
+              <TouchableOpacity
+                style={[styles.stepButton, isWide && styles.stepButtonWide]}
+                activeOpacity={0.7}
+                disabled={updatingId === item.product_id}
+                onPress={() => changeQuantity(item, item.quantity - 1)}
+              >
+                <Text style={styles.stepButtonText}>−</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.stepValue, isWide && styles.stepValueWide]}>
+                {item.quantity}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.stepButton, isWide && styles.stepButtonWide]}
+                activeOpacity={0.7}
+                disabled={
+                  updatingId === item.product_id ||
+                  item.quantity >= item.stock
+                }
+                onPress={() => changeQuantity(item, item.quantity + 1)}
+              >
+                <Text style={styles.stepButtonText}>+</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.removeLink}
+                activeOpacity={0.7}
+                onPress={() => setRemoveTarget(item)}
+              >
+                <Text style={[styles.removeLinkText, isWide && styles.removeLinkTextWide]}>
+                  ลบ
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {item.quantity >= item.stock && (
+              <Text style={styles.stockWarning}>
+                มีสินค้าเหลือสูงสุด {item.stock} ชิ้น
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+      ListEmptyComponent={
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>ตะกร้าว่างเปล่า</Text>
+          <Text style={styles.emptyText}>
+            ยังไม่มีสินค้าในตะกร้า ลองเลือกซื้อสินค้าดูก่อนนะ
+          </Text>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            activeOpacity={0.8}
+            onPress={onBack}
+          >
+            <Text style={styles.primaryButtonText}>ไปเลือกซื้อสินค้า</Text>
+          </TouchableOpacity>
+        </View>
+      }
+    />
+  );
+
+  // สรุปยอด + VAT breakdown ใช้ร่วมกันทั้งแผงด้านข้าง (จอกว้าง) และแถบด้านล่าง (จอแคบ)
+  const summaryBreakdown = (
+    <>
+      <View style={styles.priceRow}>
+        <Text style={styles.priceLabel}>ราคาสินค้า (ก่อน VAT)</Text>
+        <Text style={styles.priceValue}>
+          ฿{amountExVat.toLocaleString("th-TH", { maximumFractionDigits: 2 })}
+        </Text>
+      </View>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.priceLabel}>ภาษีมูลค่าเพิ่ม (VAT 7%)</Text>
+        <Text style={styles.priceValue}>
+          ฿{vatAmount.toLocaleString("th-TH", { maximumFractionDigits: 2 })}
+        </Text>
+      </View>
+    </>
+  );
+
+  if (isWide) {
+    return (
+      <View style={styles.wideContainer}>
+        {cartList}
+
+        {items.length > 0 && (
+          <View style={styles.summarySidebar}>
+            <View>
+              <Text style={styles.summarySidebarTitle}>สรุปคำสั่งซื้อ</Text>
+
+              {summaryBreakdown}
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>ยอดรวมทั้งสิ้น</Text>
+                <Text style={styles.summaryTotal}>
+                  ฿{total.toLocaleString("th-TH")}
+                </Text>
+              </View>
+            </View>
+
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={styles.checkoutButton}
               activeOpacity={0.8}
-              onPress={onBack}
+              onPress={() => setShowConfirm(true)}
             >
-              <Text style={styles.primaryButtonText}>ไปเลือกซื้อสินค้า</Text>
+              <Text style={styles.checkoutButtonText}>ดำเนินการสั่งซื้อ</Text>
             </TouchableOpacity>
           </View>
-        }
-      />
+        )}
+
+        <ConfirmDialog
+          visible={!!removeTarget}
+          title="ลบสินค้าออกจากตะกร้า"
+          message={
+            removeTarget ? `ต้องการลบ "${removeTarget.name}" ออกจากตะกร้าใช่หรือไม่?` : ""
+          }
+          confirmText="ลบ"
+          cancelText="ยกเลิก"
+          destructive
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={confirmRemove}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {cartList}
 
       {items.length > 0 && (
         <View style={styles.summaryBar}>
+          {summaryBreakdown}
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>ยอดรวม</Text>
+            <Text style={styles.summaryLabel}>ยอดรวมทั้งสิ้น</Text>
             <Text style={styles.summaryTotal}>
               ฿{total.toLocaleString("th-TH")}
             </Text>
@@ -373,6 +464,62 @@ const styles = StyleSheet.create({
     paddingBottom: 140,
   },
 
+  wideContainer: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "#FAFAFA",
+  },
+
+  wideListFlex: {
+    flex: 1,
+  },
+
+  wideList: {
+    padding: 28,
+    paddingRight: 20,
+    flexGrow: 1,
+  },
+
+  summarySidebar: {
+    width: "42%",
+    minWidth: 420,
+    maxWidth: 640,
+    backgroundColor: "#FFFFFF",
+    borderLeftWidth: 1,
+    borderLeftColor: "#EDEDED",
+    padding: 32,
+    justifyContent: "space-between",
+  },
+
+  summarySidebarTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111111",
+    marginBottom: 24,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+
+  priceLabel: {
+    fontSize: 16,
+    color: "#6B6B6B",
+  },
+
+  priceValue: {
+    fontSize: 16,
+    color: "#6B6B6B",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#EDEDED",
+    marginVertical: 16,
+  },
+
   row: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
@@ -383,11 +530,23 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  rowWide: {
+    padding: 20,
+    marginBottom: 16,
+    borderRadius: 18,
+  },
+
   image: {
     width: 76,
     height: 76,
     borderRadius: 10,
     backgroundColor: "#F1F1F1",
+  },
+
+  imageWide: {
+    width: 120,
+    height: 120,
+    borderRadius: 14,
   },
 
   rowInfo: {
@@ -402,11 +561,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
+  nameWide: {
+    fontSize: 19,
+    marginBottom: 6,
+  },
+
   price: {
     fontSize: 13,
     fontWeight: "700",
     color: "#111111",
     marginBottom: 8,
+  },
+
+  priceWide: {
+    fontSize: 17,
+    marginBottom: 14,
   },
 
   stepper: {
@@ -425,6 +594,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  stepButtonWide: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+  },
+
   stepButtonText: {
     fontSize: 16,
     fontWeight: "700",
@@ -439,6 +614,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  stepValueWide: {
+    fontSize: 17,
+    minWidth: 24,
+  },
+
   removeLink: {
     marginLeft: "auto",
   },
@@ -447,6 +627,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#B3413E",
+  },
+
+  removeLinkTextWide: {
+    fontSize: 14,
   },
 
   stockWarning: {
@@ -494,26 +678,26 @@ const styles = StyleSheet.create({
   },
 
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 17,
     color: "#6B6B6B",
   },
 
   summaryTotal: {
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: "700",
     color: "#111111",
   },
 
   checkoutButton: {
     backgroundColor: "#111111",
-    paddingVertical: 14,
+    paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
   },
 
   checkoutButtonText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "700",
   },
 

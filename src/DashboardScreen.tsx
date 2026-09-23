@@ -105,12 +105,20 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>ยอดขายรวมทั้งหมด</Text>
           <Text style={styles.statValue}>{money(summary.total_revenue)}</Text>
           <Text style={styles.statSub}>{summary.total_orders} ออเดอร์</Text>
+          <Text style={styles.statVat}>
+            ก่อน VAT {money(summary.total_revenue / 1.07)} · VAT{" "}
+            {money(summary.total_revenue - summary.total_revenue / 1.07)}
+          </Text>
         </View>
 
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>ยอดขายวันนี้</Text>
           <Text style={styles.statValue}>{money(summary.today_revenue)}</Text>
           <Text style={styles.statSub}>{summary.today_orders} ออเดอร์</Text>
+          <Text style={styles.statVat}>
+            ก่อน VAT {money(summary.today_revenue / 1.07)} · VAT{" "}
+            {money(summary.today_revenue - summary.today_revenue / 1.07)}
+          </Text>
         </View>
 
         <View style={styles.statCard}>
@@ -309,6 +317,12 @@ const styles = StyleSheet.create({
   statSub: {
     fontSize: 11,
     color: "#9A9A9A",
+  },
+
+  statVat: {
+    fontSize: 10.5,
+    color: "#B0B0B0",
+    marginTop: 2,
   },
 
   card: {

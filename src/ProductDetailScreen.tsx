@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { addToCart } from "./api";
+import ProductReviews from "./components/ProductReviews";
 import { useCart } from "./context/CartContext";
 import { useWishlist } from "./context/WishlistContext";
 
@@ -148,6 +149,13 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
           <Text style={styles.price}>
             ฿{Number(product.price).toLocaleString("th-TH")}
           </Text>
+          <Text style={styles.vatNote}>
+            ราคานี้รวม VAT 7% แล้ว (ราคาก่อน VAT ฿
+            {(Number(product.price) / 1.07).toLocaleString("th-TH", {
+              maximumFractionDigits: 2,
+            })}
+            )
+          </Text>
 
           <View style={styles.badgeGroup}>
             <Text
@@ -230,6 +238,8 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
           </View>
         </View>
       </View>
+
+      <ProductReviews productId={product.id} />
     </ScrollView>
   );
 }
@@ -332,6 +342,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: "#111111",
+    marginBottom: 2,
+  },
+
+  vatNote: {
+    fontSize: 12,
+    color: "#8A8A8A",
     marginBottom: 12,
   },
 

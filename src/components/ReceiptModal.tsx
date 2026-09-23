@@ -10,6 +10,8 @@ interface Props {
   totalAmount: number;
   coinsEarned?: number;
   paymentMethod?: string;
+  discountCode?: string | null;
+  discountAmount?: number;
   onClose: () => void;
 }
 
@@ -21,6 +23,8 @@ export default function ReceiptModal({
   totalAmount,
   coinsEarned,
   paymentMethod,
+  discountCode,
+  discountAmount,
   onClose,
 }: Props) {
   return (
@@ -40,6 +44,8 @@ export default function ReceiptModal({
               totalAmount={totalAmount}
               coinsEarned={coinsEarned}
               paymentMethod={paymentMethod}
+              discountCode={discountCode}
+              discountAmount={discountAmount}
             />
           </ScrollView>
 

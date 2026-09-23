@@ -24,6 +24,8 @@ interface Order {
   total_amount: number;
   status?: "pending" | "shipping" | "delivered" | "cancelled";
   payment_method?: string;
+  discount_code?: string | null;
+  discount_amount?: number;
   created_at: string;
   items: OrderItem[];
 }
@@ -189,6 +191,8 @@ export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
           items={receiptOrder.items}
           totalAmount={receiptOrder.total_amount}
           paymentMethod={receiptOrder.payment_method}
+          discountCode={receiptOrder.discount_code}
+          discountAmount={receiptOrder.discount_amount}
           onClose={() => setReceiptOrder(null)}
         />
       )}

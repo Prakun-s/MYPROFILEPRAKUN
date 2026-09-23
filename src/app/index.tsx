@@ -10,9 +10,12 @@ import {
 
 import AddProductScreen from "../AddProductScreen";
 import AdminClaimsScreen from "../AdminClaimsScreen";
+import AdminCoinRewardsScreen from "../AdminCoinRewardsScreen";
+import AdminDiscountsScreen from "../AdminDiscountsScreen";
 import AdminOrdersScreen from "../AdminOrdersScreen";
 import CartScreen, { CartScreenHandle } from "../CartScreen";
 import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
+import CoinShopScreen from "../CoinShopScreen";
 import CoinsScreen from "../CoinsScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ShopLogo from "../components/ShopLogo";
@@ -26,6 +29,7 @@ import EditProductScreen from "../EditProductScreen";
 import OrdersScreen from "../OrdersScreen";
 import ProductDetailScreen from "../ProductDetailScreen";
 import ProductListScreen from "../ProductListScreen";
+import ProfileScreen from "../ProfileScreen";
 import WishlistScreen from "../WishlistScreen";
 
 interface Product {
@@ -73,8 +77,12 @@ export default function HomeScreen() {
     | "dashboard"
     | "adminOrders"
     | "adminClaims"
+    | "adminDiscounts"
+    | "adminCoinRewards"
     | "claim"
     | "coins"
+    | "coinShop"
+    | "profile"
   >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
@@ -107,7 +115,7 @@ export default function HomeScreen() {
   // ผู้ใช้ role "user" ไม่มีสิทธิ์เข้าหน้าเพิ่ม/แก้ไขสินค้า
   // (กันไว้อีกชั้นแม้ปุ่มจะถูกซ่อนไปแล้ว)
   useEffect(() => {
-    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders" || screen === "adminClaims") && !isAdmin) {
+    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders" || screen === "adminClaims" || screen === "adminDiscounts" || screen === "adminCoinRewards") && !isAdmin) {
       setScreen("products");
     }
   }, [screen, isAdmin]);
@@ -459,6 +467,114 @@ export default function HomeScreen() {
     );
   }
 
+  if (screen === "adminDiscounts" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>จัดการส่วนลด</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <AdminDiscountsScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "adminCoinRewards" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>จัดการร้านค้าเหรียญ</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <AdminCoinRewardsScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "coinShop") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>ร้านค้าเหรียญ</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <CoinShopScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  if (screen === "profile") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("products")}
+          >
+            <Text style={styles.backText}>
+              ← Products
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.screenTitle}>ตั้งค่าโปรไฟล์</Text>
+
+          <View style={{ width: 90 }} />
+        </View>
+
+        <View style={styles.content}>
+          <ProfileScreen />
+        </View>
+
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
 
@@ -557,8 +673,12 @@ export default function HomeScreen() {
             onDashboard={() => setScreen("dashboard")}
             onAdminOrders={() => setScreen("adminOrders")}
             onAdminClaims={() => setScreen("adminClaims")}
+            onAdminDiscounts={() => setScreen("adminDiscounts")}
+            onAdminCoinRewards={() => setScreen("adminCoinRewards")}
             onOrders={() => setScreen("orders")}
             onCoins={() => setScreen("coins")}
+            onCoinShop={() => setScreen("coinShop")}
+            onProfile={() => setScreen("profile")}
             onLogout={confirmLogout}
           />
         </View>

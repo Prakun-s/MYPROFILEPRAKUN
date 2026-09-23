@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import { checkout } from "./api";
+import { DiscountCode, checkout, fetchMyDiscountCodes, validateDiscountCode } from "./api";
 import { PaymentMethod, PAYMENT_METHOD_LABELS } from "./components/Receipt";
 
 interface ConfirmItem {
@@ -25,6 +26,9 @@ interface Props {
   onConfirmed: (order: {
     id: number;
     total_amount: number;
+    subtotal_amount?: number;
+    discount_code?: string | null;
+    discount_amount?: number;
     item_count: number;
     coins_earned?: number;
     payment_method?: string;
@@ -40,7 +44,7 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; icon: string }[] = [
   { value: "credit_card", icon: "💳" },
 ];
 
-// หน้ายืนยันคำสั่งซื้อ: สรุปรายการ, แยกยอด VAT 7%, เลือกวิธีชำระเงิน แล้วค่อยยิง checkout จริง
+// หน้ายืนยันคำสั่งซื้อ: สรุปรายการ, ใส่โค้ดส่วนลด, แยกยอด VAT 7%, เลือกวิธีชำระเงิน แล้วค่อยยิง checkout จริง
 export default function OrderConfirmScreen({
   items,
   totalAmount,
@@ -51,15 +55,74 @@ export default function OrderConfirmScreen({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const amountExVat = totalAmount / (1 + VAT_RATE);
-  const vatAmount = totalAmount - amountExVat;
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code: string;
+    label: string;
+    discount_amount: number;
+  } | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
+  const [discountError, setDiscountError] = useState("");
+
+  const [myCodes, setMyCodes] = useState<DiscountCode[]>([]);
+  const [myCodesLoading, setMyCodesLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchMyDiscountCodes();
+        setMyCodes(data);
+      } catch (err) {
+        console.error("Load my discount codes error:", err);
+      } finally {
+        setMyCodesLoading(false);
+      }
+    })();
+  }, []);
+
+  const usableCodes = myCodes.filter((c) => {
+    if (c.used_at) return false;
+    if (c.end_date && new Date(c.end_date) < new Date()) return false;
+    if (Number(c.min_order_amount) > totalAmount) return false;
+    return true;
+  });
+
+  const grandTotal = Math.max(0, totalAmount - (appliedDiscount?.discount_amount || 0));
+  const amountExVat = grandTotal / (1 + VAT_RATE);
+  const vatAmount = grandTotal - amountExVat;
+
+  const handleApplyDiscount = async (codeOverride?: string) => {
+    const codeToApply = (codeOverride ?? discountInput).trim();
+    if (!codeToApply) return;
+
+    setDiscountError("");
+    setCheckingCode(true);
+
+    try {
+      const result = await validateDiscountCode(codeToApply, totalAmount);
+      setAppliedDiscount(result);
+      setDiscountInput(codeToApply);
+    } catch (err: any) {
+      console.error("Validate discount code error:", err);
+      setAppliedDiscount(null);
+      setDiscountError(err.message || "โค้ดส่วนลดไม่ถูกต้อง");
+    } finally {
+      setCheckingCode(false);
+    }
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountInput("");
+    setDiscountError("");
+  };
 
   const handleConfirm = async () => {
     setError("");
     setSubmitting(true);
 
     try {
-      const result = await checkout(paymentMethod);
+      const result = await checkout(paymentMethod, appliedDiscount?.code);
       onConfirmed(result.order);
     } catch (err: any) {
       console.error("Checkout error:", err);
@@ -89,9 +152,103 @@ export default function OrderConfirmScreen({
         ))}
       </View>
 
+      {/* โค้ดส่วนลด */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>โค้ดส่วนลด</Text>
+
+        {appliedDiscount ? (
+          <View style={styles.appliedDiscountRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.appliedDiscountCode}>{appliedDiscount.code}</Text>
+              <Text style={styles.appliedDiscountLabel}>{appliedDiscount.label}</Text>
+            </View>
+
+            <Text style={styles.appliedDiscountAmount}>
+              -฿{appliedDiscount.discount_amount.toLocaleString("th-TH")}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.removeDiscountButton}
+              activeOpacity={0.7}
+              onPress={handleRemoveDiscount}
+            >
+              <Text style={styles.removeDiscountText}>ลบ</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View>
+            <View style={styles.discountInputRow}>
+              <TextInput
+                style={styles.discountInput}
+                placeholder="กรอกโค้ดส่วนลด"
+                value={discountInput}
+                onChangeText={setDiscountInput}
+                autoCapitalize="characters"
+              />
+
+              <TouchableOpacity
+                style={styles.applyButton}
+                activeOpacity={0.7}
+                disabled={checkingCode || !discountInput.trim()}
+                onPress={() => handleApplyDiscount()}
+              >
+                {checkingCode ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.applyButtonText}>ใช้โค้ด</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {!myCodesLoading && usableCodes.length > 0 && (
+              <View style={styles.savedCodesSection}>
+                <Text style={styles.savedCodesLabel}>โค้ดที่เก็บไว้</Text>
+
+                <View style={styles.savedCodesGrid}>
+                  {usableCodes.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={styles.savedCodeChip}
+                      activeOpacity={0.7}
+                      disabled={checkingCode}
+                      onPress={() => handleApplyDiscount(c.code)}
+                    >
+                      <Text style={styles.savedCodeChipCode}>{c.code}</Text>
+                      <Text style={styles.savedCodeChipValue}>
+                        {c.discount_type === "percent"
+                          ? `-${c.discount_value}%`
+                          : `-฿${Number(c.discount_value).toLocaleString("th-TH")}`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {discountError ? <Text style={styles.discountErrorText}>{discountError}</Text> : null}
+      </View>
+
       {/* สรุปยอดเงิน + VAT */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>สรุปยอดชำระ</Text>
+
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>ราคาสินค้ารวม</Text>
+          <Text style={styles.priceValue}>
+            ฿{totalAmount.toLocaleString("th-TH")}
+          </Text>
+        </View>
+
+        {appliedDiscount && (
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>ส่วนลด ({appliedDiscount.code})</Text>
+            <Text style={styles.discountValueText}>
+              -฿{appliedDiscount.discount_amount.toLocaleString("th-TH")}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>ราคาสินค้า (ก่อน VAT)</Text>
@@ -112,7 +269,7 @@ export default function OrderConfirmScreen({
         <View style={styles.priceRow}>
           <Text style={styles.grandTotalLabel}>ยอดชำระทั้งสิ้น</Text>
           <Text style={styles.grandTotalValue}>
-            ฿{totalAmount.toLocaleString("th-TH")}
+            ฿{grandTotal.toLocaleString("th-TH")}
           </Text>
         </View>
       </View>
@@ -166,7 +323,7 @@ export default function OrderConfirmScreen({
           <ActivityIndicator size="small" color="#FFFFFF" />
         ) : (
           <Text style={styles.confirmButtonText}>
-            ยืนยันการสั่งซื้อ · ฿{totalAmount.toLocaleString("th-TH")}
+            ยืนยันการสั่งซื้อ · ฿{grandTotal.toLocaleString("th-TH")}
           </Text>
         )}
       </TouchableOpacity>
@@ -250,6 +407,125 @@ const styles = StyleSheet.create({
   priceValue: {
     fontSize: 13,
     color: "#6B6B6B",
+  },
+
+  discountValueText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E8E3E",
+  },
+
+  discountInputRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  discountInput: {
+    flex: 1,
+    backgroundColor: "#FAFAFA",
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: "#2B2B31",
+  },
+
+  applyButton: {
+    backgroundColor: "#111111",
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  applyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  discountErrorText: {
+    fontSize: 12,
+    color: "#B3413E",
+    marginTop: 8,
+  },
+
+  savedCodesSection: {
+    marginTop: 14,
+  },
+
+  savedCodesLabel: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#8A8A8A",
+    marginBottom: 8,
+  },
+
+  savedCodesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  savedCodeChip: {
+    borderWidth: 1,
+    borderColor: "#E5E3DC",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#FAFAFA",
+  },
+
+  savedCodeChipCode: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#111111",
+  },
+
+  savedCodeChipValue: {
+    fontSize: 11,
+    color: "#1E8E3E",
+    fontWeight: "700",
+    marginTop: 1,
+  },
+
+  appliedDiscountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E3F3E7",
+    borderRadius: 10,
+    padding: 12,
+  },
+
+  appliedDiscountCode: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#111111",
+  },
+
+  appliedDiscountLabel: {
+    fontSize: 11.5,
+    color: "#4A4A4A",
+    marginTop: 1,
+  },
+
+  appliedDiscountAmount: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E8E3E",
+    marginRight: 12,
+  },
+
+  removeDiscountButton: {
+    paddingHorizontal: 4,
+  },
+
+  removeDiscountText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#B3413E",
   },
 
   divider: {

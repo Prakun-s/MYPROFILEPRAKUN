@@ -222,4 +222,122 @@ router.post(
   }
 );
 
+// =========================
+// GET /api/auth/profile
+// ข้อมูลโปรไฟล์แบบเต็ม (username, role ใน token มีอยู่แล้ว แต่ข้อมูลโปรไฟล์ต้องดึงจาก DB สดๆ)
+// =========================
+router.get("/profile", authenticateToken, async (req, res) => {
+  try {
+    const [[user]] = await pool.query(
+      `SELECT id, username, role, full_name, email, phone, address, avatar_url, created_at
+       FROM users WHERE id = ?`,
+      [req.user.id]
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "ไม่พบผู้ใช้นี้" });
+    }
+
+    res.json({ success: true, data: user });
+  } catch (error) {
+    console.error("❌ Get profile error:", error);
+
+    if (error.code === "ER_BAD_FIELD_ERROR") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีคอลัมน์โปรไฟล์ในตาราง users — กรุณารัน Backend/sql/user_profile.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// =========================
+// PUT /api/auth/profile
+// แก้ไขข้อมูลโปรไฟล์ (ไม่รวมรหัสผ่าน/username/role)
+// =========================
+router.put("/profile", authenticateToken, async (req, res) => {
+  try {
+    const { full_name, email, phone, address, avatar_url } = req.body;
+
+    await pool.query(
+      `UPDATE users
+       SET full_name = ?, email = ?, phone = ?, address = ?, avatar_url = ?
+       WHERE id = ?`,
+      [
+        full_name?.trim() || null,
+        email?.trim() || null,
+        phone?.trim() || null,
+        address?.trim() || null,
+        avatar_url?.trim() || null,
+        req.user.id,
+      ]
+    );
+
+    res.json({ success: true, message: "บันทึกโปรไฟล์สำเร็จ" });
+  } catch (error) {
+    console.error("❌ Update profile error:", error);
+
+    if (error.code === "ER_BAD_FIELD_ERROR") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีคอลัมน์โปรไฟล์ในตาราง users — กรุณารัน Backend/sql/user_profile.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// =========================
+// PUT /api/auth/password
+// เปลี่ยนรหัสผ่าน (ต้องยืนยันรหัสผ่านเดิมก่อน)
+// =========================
+router.put("/password", authenticateToken, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณากรอกรหัสผ่านเดิมและรหัสผ่านใหม่",
+      });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร",
+      });
+    }
+
+    const [[dbUser]] = await pool.query("SELECT password_hash FROM users WHERE id = ?", [
+      req.user.id,
+    ]);
+
+    if (!dbUser) {
+      return res.status(404).json({ success: false, message: "ไม่พบผู้ใช้นี้" });
+    }
+
+    const matches = await bcrypt.compare(current_password, dbUser.password_hash);
+
+    if (!matches) {
+      return res.status(401).json({ success: false, message: "รหัสผ่านเดิมไม่ถูกต้อง" });
+    }
+
+    const newHash = await bcrypt.hash(new_password, 10);
+
+    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [
+      newHash,
+      req.user.id,
+    ]);
+
+    res.json({ success: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" });
+  } catch (error) {
+    console.error("❌ Change password error:", error);
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
 module.exports = router;

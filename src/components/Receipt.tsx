@@ -24,10 +24,12 @@ interface Props {
   totalAmount: number;
   coinsEarned?: number;
   paymentMethod?: string;
+  discountCode?: string | null;
+  discountAmount?: number;
 }
 
 // ใบเสร็จ/บิลสำหรับแสดงหลังสั่งซื้อสำเร็จ หรือดูย้อนหลังจากประวัติการสั่งซื้อ
-// ราคาสินค้าที่ลูกค้าเห็น (totalAmount) ถือเป็นราคารวม VAT แล้วตามกฎหมาย
+// ราคาสินค้าที่ลูกค้าเห็น (totalAmount) ถือเป็นราคารวม VAT แล้วตามกฎหมาย (และเป็นยอดหลังหักส่วนลดแล้ว)
 // จึงแยกยอดก่อนภาษี/VAT ให้ดูเฉยๆ โดยไม่ได้บวกเพิ่มจากยอดที่เรียกเก็บจริง
 export default function Receipt({
   orderId,
@@ -36,7 +38,11 @@ export default function Receipt({
   totalAmount,
   coinsEarned,
   paymentMethod,
+  discountCode,
+  discountAmount,
 }: Props) {
+  const hasDiscount = !!discountCode && Number(discountAmount) > 0;
+  const subtotalBeforeDiscount = Number(totalAmount) + Number(discountAmount || 0);
   const amountExVat = Number(totalAmount) / (1 + VAT_RATE);
   const vatAmount = Number(totalAmount) - amountExVat;
 
@@ -94,6 +100,24 @@ export default function Receipt({
       })}
 
       <View style={styles.dashedDivider} />
+
+      {hasDiscount && (
+        <>
+          <View style={styles.vatRow}>
+            <Text style={styles.vatLabel}>ราคาสินค้ารวม</Text>
+            <Text style={styles.vatValue}>
+              ฿{subtotalBeforeDiscount.toLocaleString("th-TH")}
+            </Text>
+          </View>
+
+          <View style={styles.vatRow}>
+            <Text style={styles.vatLabel}>ส่วนลด ({discountCode})</Text>
+            <Text style={styles.discountText}>
+              -฿{Number(discountAmount).toLocaleString("th-TH")}
+            </Text>
+          </View>
+        </>
+      )}
 
       <View style={styles.vatRow}>
         <Text style={styles.vatLabel}>ราคาสินค้า (ก่อน VAT)</Text>
@@ -225,6 +249,12 @@ const styles = StyleSheet.create({
   vatValue: {
     fontSize: 12.5,
     color: "#6B6B6B",
+  },
+
+  discountText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#1E8E3E",
   },
 
   totalRow: {

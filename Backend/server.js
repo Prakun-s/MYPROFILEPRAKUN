@@ -6,6 +6,7 @@ require("dotenv").config();
 const authRouter = require("./src/routes/auth");
 const { authenticateToken, requireRole } = require("./src/middleware/auth");
 const { calculateCoinsWithAI } = require("./src/coinCalculator");
+const { validateDiscountCode, generateVoucherCode } = require("./src/discountEngine");
 
 const app = express();
 
@@ -132,6 +133,118 @@ app.get("/api/products/:id", authenticateToken, async (req, res) => {
       message: "Database error",
       error: error.message,
     });
+  }
+});
+
+// =========================
+// Product Reviews (คะแนน + รีวิวสินค้า)
+// =========================
+
+// GET รีวิวทั้งหมดของสินค้าชิ้นนี้ + สรุปคะแนนเฉลี่ย + รีวิวของผู้ใช้ที่ login อยู่ (ถ้ามี)
+app.get("/api/products/:id/reviews", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [reviews] = await pool.query(
+      `SELECT r.id, r.rating, r.comment, r.user_id, r.created_at, r.updated_at, u.username
+       FROM product_reviews r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.product_id = ?
+       ORDER BY r.created_at DESC`,
+      [id]
+    );
+
+    const reviewCount = reviews.length;
+    const averageRating =
+      reviewCount > 0
+        ? reviews.reduce((sum, r) => sum + Number(r.rating), 0) / reviewCount
+        : 0;
+
+    const myReview = reviews.find((r) => r.user_id === req.user.id) || null;
+
+    res.json({
+      success: true,
+      data: {
+        reviews,
+        review_count: reviewCount,
+        average_rating: Math.round(averageRating * 10) / 10,
+        my_review: myReview,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get product reviews error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีระบบรีวิวในฐานข้อมูล — กรุณารัน Backend/sql/product_reviews.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// POST ให้คะแนน+เขียนรีวิวสินค้า (รีวิวซ้ำ = แก้ไขรีวิวเดิมของตัวเองแทน)
+app.post("/api/products/:id/reviews", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, comment } = req.body;
+
+    const ratingNum = Number(rating);
+
+    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return res.status(400).json({ success: false, message: "คะแนนต้องเป็นจำนวนเต็ม 1-5" });
+    }
+
+    const [[product]] = await pool.query("SELECT id FROM Inventory WHERE id = ?", [id]);
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "ไม่พบสินค้านี้" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO product_reviews (product_id, user_id, rating, comment)
+      VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE rating = VALUES(rating), comment = VALUES(comment)
+      `,
+      [id, req.user.id, ratingNum, comment ? String(comment).trim().slice(0, 2000) : null]
+    );
+
+    res.status(201).json({ success: true, message: "บันทึกรีวิวสำเร็จ" });
+  } catch (error) {
+    console.error("❌ Create/update product review error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีระบบรีวิวในฐานข้อมูล — กรุณารัน Backend/sql/product_reviews.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// DELETE ลบรีวิวของตัวเอง
+app.delete("/api/products/:id/reviews", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await pool.query(
+      "DELETE FROM product_reviews WHERE product_id = ? AND user_id = ?",
+      [id, req.user.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "ไม่พบรีวิวของคุณสำหรับสินค้านี้" });
+    }
+
+    res.json({ success: true, message: "ลบรีวิวแล้ว" });
+  } catch (error) {
+    console.error("❌ Delete product review error:", error);
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
   }
 });
 
@@ -697,12 +810,57 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
       0
     );
 
+    // ถ้ามีโค้ดส่วนลดแนบมา ตรวจสอบซ้ำฝั่ง server เสมอ (ห้ามเชื่อตัวเลขที่ฝั่งแอปคำนวณมา)
+    let discountAmount = 0;
+    let appliedDiscountCode = null;
+    let discountRow = null;
+
+    if (req.body.discount_code) {
+      const result = await validateDiscountCode(
+        connection,
+        req.body.discount_code,
+        totalAmount,
+        req.user.id
+      );
+
+      if (!result.valid) {
+        await connection.rollback();
+        connection.release();
+
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+        });
+      }
+
+      discountAmount = result.discountAmount;
+      appliedDiscountCode = result.row.code;
+      discountRow = result.row;
+    }
+
+    const finalAmount = Math.max(0, totalAmount - discountAmount);
+
     const [orderResult] = await connection.query(
-      "INSERT INTO orders (user_id, total_amount, payment_method) VALUES (?, ?, ?)",
-      [req.user.id, totalAmount, paymentMethod]
+      "INSERT INTO orders (user_id, total_amount, payment_method, discount_code, discount_amount) VALUES (?, ?, ?, ?, ?)",
+      [req.user.id, finalAmount, paymentMethod, appliedDiscountCode, discountAmount]
     );
 
     const orderId = orderResult.insertId;
+
+    // บันทึกว่าใช้โค้ดส่วนลดนี้ไปแล้ว (โค้ดแอดมิน: นับจำนวนครั้ง / โค้ดที่แลกด้วยเหรียญ: ใช้ได้ครั้งเดียว)
+    if (discountRow) {
+      if (discountRow.source === "coin_redeem" || discountRow.source === "collected") {
+        await connection.query(
+          "UPDATE discount_codes SET used_count = used_count + 1, used_at = NOW() WHERE id = ?",
+          [discountRow.id]
+        );
+      } else {
+        await connection.query(
+          "UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?",
+          [discountRow.id]
+        );
+      }
+    }
 
     for (const item of cartRows) {
       await connection.query(
@@ -739,7 +897,7 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
     let coinsEarned = 0;
 
     try {
-      const coinResult = await calculateCoinsWithAI(totalAmount);
+      const coinResult = await calculateCoinsWithAI(finalAmount);
       coinsEarned = coinResult.coins;
 
       await pool.query(
@@ -751,7 +909,7 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
           req.user.id,
           orderId,
           coinResult.coins,
-          totalAmount,
+          finalAmount,
           coinResult.reasoning,
           coinResult.source,
         ]
@@ -771,7 +929,10 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
       message: "สั่งซื้อสำเร็จ",
       order: {
         id: orderId,
-        total_amount: totalAmount,
+        total_amount: finalAmount,
+        subtotal_amount: totalAmount,
+        discount_code: appliedDiscountCode,
+        discount_amount: discountAmount,
         item_count: cartRows.length,
         coins_earned: coinsEarned,
         payment_method: paymentMethod,
@@ -787,7 +948,15 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
       return res.status(500).json({
         success: false,
         message:
-          "ยังไม่มีคอลัมน์ payment_method ในตาราง orders — กรุณารัน Backend/sql/orders_payment_method.sql ก่อน",
+          "ฐานข้อมูลยังไม่ครบ (payment_method หรือ discount_code) — กรุณารัน Backend/sql/orders_payment_method.sql และ Backend/sql/orders_discount.sql ก่อน",
+      });
+    }
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message:
+          "ยังไม่มีตาราง discount_codes — กรุณารัน Backend/sql/discounts.sql ก่อน",
       });
     }
 
@@ -800,12 +969,561 @@ app.post("/api/checkout", authenticateToken, async (req, res) => {
 });
 
 // =========================
+// Discount Codes (ส่วนลดตามฤดูกาล/เทศกาล + โค้ดที่แลกด้วยเหรียญ)
+// =========================
+
+// POST ตรวจสอบโค้ดส่วนลดก่อนสั่งซื้อจริง (ใช้ตอนกรอกโค้ดในหน้ายืนยันคำสั่งซื้อ)
+app.post("/api/discount-codes/validate", authenticateToken, async (req, res) => {
+  try {
+    const { code, order_amount } = req.body;
+
+    const result = await validateDiscountCode(pool, code, order_amount || 0, req.user.id);
+
+    if (!result.valid) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        code: result.row.code,
+        label: result.row.label,
+        discount_amount: result.discountAmount,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Validate discount code error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีตาราง discount_codes — กรุณารัน Backend/sql/discounts.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET โค้ดส่วนลดส่วนตัวของผู้ใช้ (ที่แลกด้วยเหรียญ หรือเก็บมาจากโค้ดสาธารณะ)
+app.get("/api/discount-codes/my", authenticateToken, async (req, res) => {
+  try {
+    const [codes] = await pool.query(
+      `SELECT id, code, label, discount_type, discount_value, max_discount_amount,
+              min_order_amount, end_date, used_at, source, source_code_id, created_at
+       FROM discount_codes
+       WHERE owner_user_id = ?
+       ORDER BY created_at DESC`,
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: codes });
+  } catch (error) {
+    console.error("❌ Get my discount codes error:", error);
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET โค้ดส่วนลดสาธารณะที่แอดมินสร้างและยังใช้งานได้อยู่ตอนนี้ (ให้ผู้ใช้ทุกคนเรียกดู/กด "เก็บโค้ด" ได้)
+app.get("/api/discount-codes/public", authenticateToken, async (req, res) => {
+  try {
+    const [codes] = await pool.query(
+      `SELECT id, code, label, season, discount_type, discount_value, max_discount_amount,
+              min_order_amount, start_date, end_date, usage_limit, used_count, created_at
+       FROM discount_codes
+       WHERE source = 'admin'
+         AND is_active = 1
+         AND (start_date IS NULL OR start_date <= CURDATE())
+         AND (end_date IS NULL OR end_date >= CURDATE())
+         AND (usage_limit IS NULL OR used_count < usage_limit)
+       ORDER BY created_at DESC`
+    );
+
+    res.json({ success: true, data: codes });
+  } catch (error) {
+    console.error("❌ Get public discount codes error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีตาราง discount_codes — กรุณารัน Backend/sql/discounts.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// POST เก็บโค้ดส่วนลดสาธารณะ (ของแอดมิน) มาเป็นสำเนาส่วนตัว ใช้ได้ครั้งเดียว ไม่ถูกคนอื่นแย่งใช้จนหมดสิทธิ์
+app.post("/api/discount-codes/:id/collect", authenticateToken, async (req, res) => {
+  try {
+    const [[source]] = await pool.query(
+      "SELECT * FROM discount_codes WHERE id = ? AND source = 'admin'",
+      [req.params.id]
+    );
+
+    if (!source) {
+      return res.status(404).json({ success: false, message: "ไม่พบโค้ดนี้" });
+    }
+
+    if (!source.is_active) {
+      return res.status(400).json({ success: false, message: "โค้ดนี้ถูกปิดใช้งานแล้ว" });
+    }
+
+    const today = new Date();
+    if (source.end_date && new Date(source.end_date) < today) {
+      return res.status(400).json({ success: false, message: "โค้ดนี้หมดอายุแล้ว" });
+    }
+
+    if (source.usage_limit !== null && source.used_count >= source.usage_limit) {
+      return res.status(409).json({ success: false, message: "โค้ดนี้ถูกใช้ครบจำนวนสิทธิ์แล้ว" });
+    }
+
+    const [[already]] = await pool.query(
+      "SELECT id FROM discount_codes WHERE owner_user_id = ? AND source_code_id = ?",
+      [req.user.id, source.id]
+    );
+
+    if (already) {
+      return res.status(409).json({ success: false, message: "คุณเก็บโค้ดนี้ไปแล้ว" });
+    }
+
+    const personalCode = `${source.code}-${req.user.id}`;
+
+    await pool.query(
+      `
+      INSERT INTO discount_codes
+        (code, label, season, discount_type, discount_value, max_discount_amount,
+         min_order_amount, end_date, usage_limit, is_active, owner_user_id, source, source_code_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, 'collected', ?)
+      `,
+      [
+        personalCode,
+        source.label,
+        source.season,
+        source.discount_type,
+        source.discount_value,
+        source.max_discount_amount,
+        source.min_order_amount,
+        source.end_date,
+        req.user.id,
+        source.id,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "เก็บโค้ดสำเร็จ",
+      data: { code: personalCode, label: source.label },
+    });
+  } catch (error) {
+    console.error("❌ Collect discount code error:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ success: false, message: "คุณเก็บโค้ดนี้ไปแล้ว" });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET รายการโค้ดส่วนลดทั้งหมดที่แอดมินสร้าง (เฉพาะ admin)
+app.get(
+  "/api/admin/discount-codes",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [codes] = await pool.query(
+        "SELECT * FROM discount_codes WHERE source = 'admin' ORDER BY created_at DESC"
+      );
+
+      res.json({ success: true, data: codes });
+    } catch (error) {
+      console.error("❌ Get admin discount codes error:", error);
+
+      if (error.code === "ER_NO_SUCH_TABLE") {
+        return res.status(500).json({
+          success: false,
+          message: "ยังไม่มีตาราง discount_codes — กรุณารัน Backend/sql/discounts.sql ก่อน",
+        });
+      }
+
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// POST สร้างโค้ดส่วนลดใหม่ (เฉพาะ admin) — เลือกจากพรีเซ็ตฤดูกาล/เทศกาล หรือกำหนดเองก็ได้
+app.post(
+  "/api/admin/discount-codes",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const {
+        code,
+        label,
+        season,
+        discount_type,
+        discount_value,
+        max_discount_amount,
+        min_order_amount,
+        start_date,
+        end_date,
+        usage_limit,
+      } = req.body;
+
+      if (!code || !label) {
+        return res.status(400).json({ success: false, message: "กรุณาระบุโค้ดและชื่อโปรโมชัน" });
+      }
+
+      if (!["percent", "fixed"].includes(discount_type)) {
+        return res.status(400).json({ success: false, message: "discount_type ต้องเป็น percent หรือ fixed" });
+      }
+
+      if (!discount_value || Number(discount_value) <= 0) {
+        return res.status(400).json({ success: false, message: "กรุณาระบุมูลค่าส่วนลด" });
+      }
+
+      const [result] = await pool.query(
+        `
+        INSERT INTO discount_codes
+          (code, label, season, discount_type, discount_value, max_discount_amount,
+           min_order_amount, start_date, end_date, usage_limit, is_active, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'admin')
+        `,
+        [
+          String(code).trim().toUpperCase(),
+          label,
+          season || null,
+          discount_type,
+          discount_value,
+          max_discount_amount || null,
+          min_order_amount || 0,
+          start_date || null,
+          end_date || null,
+          usage_limit || null,
+        ]
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "สร้างโค้ดส่วนลดสำเร็จ",
+        data: { id: result.insertId },
+      });
+    } catch (error) {
+      console.error("❌ Create discount code error:", error);
+
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ success: false, message: "มีโค้ดนี้อยู่แล้ว กรุณาใช้โค้ดอื่น" });
+      }
+
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// PUT เปิด/ปิดใช้งานโค้ดส่วนลด (เฉพาะ admin)
+app.put(
+  "/api/admin/discount-codes/:id/toggle",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { is_active } = req.body;
+
+      const [result] = await pool.query(
+        "UPDATE discount_codes SET is_active = ? WHERE id = ? AND source = 'admin'",
+        [is_active ? 1 : 0, req.params.id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "ไม่พบโค้ดนี้" });
+      }
+
+      res.json({ success: true, message: "อัปเดตสถานะโค้ดสำเร็จ" });
+    } catch (error) {
+      console.error("❌ Toggle discount code error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// DELETE ลบโค้ดส่วนลด (เฉพาะ admin)
+app.delete(
+  "/api/admin/discount-codes/:id",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [result] = await pool.query(
+        "DELETE FROM discount_codes WHERE id = ? AND source = 'admin'",
+        [req.params.id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "ไม่พบโค้ดนี้" });
+      }
+
+      res.json({ success: true, message: "ลบโค้ดส่วนลดสำเร็จ" });
+    } catch (error) {
+      console.error("❌ Delete discount code error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// =========================
+// Coin Rewards (ร้านค้าเหรียญ: แลกเหรียญสะสมเป็นโค้ดส่วนลดส่วนตัว)
+// =========================
+
+// GET รายการรางวัลที่แลกได้ตอนนี้ (ทุกคนที่ login แล้วดูได้)
+app.get("/api/coin-rewards", authenticateToken, async (req, res) => {
+  try {
+    const [rewards] = await pool.query(
+      "SELECT * FROM coin_rewards WHERE is_active = 1 ORDER BY coin_cost ASC"
+    );
+
+    res.json({ success: true, data: rewards });
+  } catch (error) {
+    console.error("❌ Get coin rewards error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        success: false,
+        message: "ยังไม่มีตาราง coin_rewards — กรุณารัน Backend/sql/discounts.sql ก่อน",
+      });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// POST แลกเหรียญเป็นโค้ดส่วนลดส่วนตัว
+app.post("/api/coin-rewards/:id/redeem", authenticateToken, async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [[reward]] = await connection.query(
+      "SELECT * FROM coin_rewards WHERE id = ? FOR UPDATE",
+      [req.params.id]
+    );
+
+    if (!reward || !reward.is_active) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ success: false, message: "ไม่พบรางวัลนี้" });
+    }
+
+    if (reward.stock !== null && reward.redeemed_count >= reward.stock) {
+      await connection.rollback();
+      connection.release();
+      return res.status(409).json({ success: false, message: "รางวัลนี้ถูกแลกหมดแล้ว" });
+    }
+
+    const [[user]] = await connection.query(
+      "SELECT coin_balance FROM users WHERE id = ? FOR UPDATE",
+      [req.user.id]
+    );
+
+    if (!user || user.coin_balance < reward.coin_cost) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ success: false, message: "เหรียญสะสมไม่พอสำหรับแลกรางวัลนี้" });
+    }
+
+    const code = generateVoucherCode();
+    const endDate = new Date(Date.now() + reward.valid_days * 24 * 60 * 60 * 1000);
+    const endDateStr = endDate.toISOString().slice(0, 10);
+
+    const [codeResult] = await connection.query(
+      `
+      INSERT INTO discount_codes
+        (code, label, season, discount_type, discount_value, max_discount_amount,
+         min_order_amount, end_date, usage_limit, is_active, owner_user_id, source)
+      VALUES (?, ?, 'coin_redeem', ?, ?, ?, ?, ?, 1, 1, ?, 'coin_redeem')
+      `,
+      [
+        code,
+        reward.name,
+        reward.discount_type,
+        reward.discount_value,
+        reward.max_discount_amount,
+        reward.min_order_amount,
+        endDateStr,
+        req.user.id,
+      ]
+    );
+
+    await connection.query(
+      "UPDATE users SET coin_balance = coin_balance - ? WHERE id = ?",
+      [reward.coin_cost, req.user.id]
+    );
+
+    await connection.query(
+      "UPDATE coin_rewards SET redeemed_count = redeemed_count + 1 WHERE id = ?",
+      [reward.id]
+    );
+
+    await connection.query(
+      "INSERT INTO coin_redemptions (user_id, reward_id, coins_spent, discount_code_id) VALUES (?, ?, ?, ?)",
+      [req.user.id, reward.id, reward.coin_cost, codeResult.insertId]
+    );
+
+    await connection.commit();
+    connection.release();
+
+    res.status(201).json({
+      success: true,
+      message: "แลกรางวัลสำเร็จ",
+      data: { code, label: reward.name, end_date: endDateStr },
+    });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+
+    console.error("❌ Redeem coin reward error:", error);
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET รายการรางวัลทั้งหมด รวมที่ปิดใช้งานแล้ว (เฉพาะ admin)
+app.get(
+  "/api/admin/coin-rewards",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [rewards] = await pool.query("SELECT * FROM coin_rewards ORDER BY created_at DESC");
+      res.json({ success: true, data: rewards });
+    } catch (error) {
+      console.error("❌ Get admin coin rewards error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// POST สร้างรางวัลใหม่ในร้านค้าเหรียญ (เฉพาะ admin)
+app.post(
+  "/api/admin/coin-rewards",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        description,
+        coin_cost,
+        discount_type,
+        discount_value,
+        max_discount_amount,
+        min_order_amount,
+        valid_days,
+        stock,
+      } = req.body;
+
+      if (!name || !coin_cost || !discount_value) {
+        return res.status(400).json({
+          success: false,
+          message: "กรุณาระบุชื่อรางวัล จำนวนเหรียญ และมูลค่าส่วนลด",
+        });
+      }
+
+      if (!["percent", "fixed"].includes(discount_type)) {
+        return res.status(400).json({ success: false, message: "discount_type ต้องเป็น percent หรือ fixed" });
+      }
+
+      const [result] = await pool.query(
+        `
+        INSERT INTO coin_rewards
+          (name, description, coin_cost, discount_type, discount_value, max_discount_amount,
+           min_order_amount, valid_days, stock, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `,
+        [
+          name,
+          description || null,
+          coin_cost,
+          discount_type,
+          discount_value,
+          max_discount_amount || null,
+          min_order_amount || 0,
+          valid_days || 30,
+          stock || null,
+        ]
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "สร้างรางวัลสำเร็จ",
+        data: { id: result.insertId },
+      });
+    } catch (error) {
+      console.error("❌ Create coin reward error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// PUT เปิด/ปิดใช้งานรางวัล (เฉพาะ admin)
+app.put(
+  "/api/admin/coin-rewards/:id/toggle",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { is_active } = req.body;
+
+      const [result] = await pool.query(
+        "UPDATE coin_rewards SET is_active = ? WHERE id = ?",
+        [is_active ? 1 : 0, req.params.id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "ไม่พบรางวัลนี้" });
+      }
+
+      res.json({ success: true, message: "อัปเดตสถานะรางวัลสำเร็จ" });
+    } catch (error) {
+      console.error("❌ Toggle coin reward error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// DELETE ลบรางวัล (เฉพาะ admin)
+app.delete(
+  "/api/admin/coin-rewards/:id",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [result] = await pool.query("DELETE FROM coin_rewards WHERE id = ?", [
+        req.params.id,
+      ]);
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "ไม่พบรางวัลนี้" });
+      }
+
+      res.json({ success: true, message: "ลบรางวัลสำเร็จ" });
+    } catch (error) {
+      console.error("❌ Delete coin reward error:", error);
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// =========================
 // GET My Orders (ประวัติการสั่งซื้อของผู้ใช้ที่ login อยู่)
 // =========================
 app.get("/api/orders/my", authenticateToken, async (req, res) => {
   try {
     const [orders] = await pool.query(
-      "SELECT id, total_amount, status, payment_method, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+      "SELECT id, total_amount, status, payment_method, discount_code, discount_amount, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC",
       [req.user.id]
     );
 
@@ -843,7 +1561,8 @@ app.get(
   async (req, res) => {
     try {
       const [orders] = await pool.query(`
-        SELECT o.id, o.user_id, o.total_amount, o.status, o.payment_method, o.created_at,
+        SELECT o.id, o.user_id, o.total_amount, o.status, o.payment_method,
+               o.discount_code, o.discount_amount, o.created_at,
                u.username
         FROM orders o
         LEFT JOIN users u ON u.id = o.user_id
