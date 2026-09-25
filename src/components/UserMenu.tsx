@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 
 import {
   Dimensions,
+  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -13,6 +14,8 @@ interface MenuAction {
   key: string;
   label: string;
   icon: string;
+  iconBg: string;
+  iconColor: string;
   onPress: () => void;
   danger?: boolean;
 }
@@ -21,7 +24,9 @@ interface Props {
   username?: string;
   roleLabel: string;
   isAdmin: boolean;
+  avatarUrl?: string | null;
   onDashboard: () => void;
+  onAdminProducts: () => void;
   onAdminOrders: () => void;
   onAdminClaims: () => void;
   onAdminDiscounts: () => void;
@@ -29,17 +34,20 @@ interface Props {
   onOrders: () => void;
   onCoins: () => void;
   onCoinShop: () => void;
+  onWishlist: () => void;
   onProfile: () => void;
   onLogout: () => void;
 }
 
 // เมนูดรอปดาวน์รวมปุ่ม "สำคัญแต่ไม่ได้กดบ่อย" ไว้ที่เดียว แยกจากปุ่มช้อปปิ้งหลัก (ถูกใจ/ตะกร้า)
-// กดที่ป้ายชื่อผู้ใช้เพื่อเปิด/ปิด
+// กดที่รูปโปรไฟล์ (avatar) มุมขวาบนเพื่อเปิด/ปิด
 export default function UserMenu({
   username,
   roleLabel,
   isAdmin,
+  avatarUrl,
   onDashboard,
+  onAdminProducts,
   onAdminOrders,
   onAdminClaims,
   onAdminDiscounts,
@@ -47,6 +55,7 @@ export default function UserMenu({
   onOrders,
   onCoins,
   onCoinShop,
+  onWishlist,
   onProfile,
   onLogout,
 }: Props) {
@@ -57,43 +66,104 @@ export default function UserMenu({
 
   const adminActions: MenuAction[] = isAdmin
     ? [
-        { key: "dashboard", label: "แดชบอร์ด", icon: "📊", onPress: onDashboard },
+        {
+          key: "dashboard",
+          label: "แดชบอร์ด",
+          icon: "📊",
+          iconBg: "#E4ECFB",
+          iconColor: "#1A56C4",
+          onPress: onDashboard,
+        },
+        {
+          key: "adminProducts",
+          label: "จัดการสินค้า",
+          icon: "📋",
+          iconBg: "#E9DFD3",
+          iconColor: "#7F562B",
+          onPress: onAdminProducts,
+        },
         {
           key: "adminOrders",
           label: "จัดการออเดอร์",
           icon: "📦",
+          iconBg: "#DFF3F1",
+          iconColor: "#0F766E",
           onPress: onAdminOrders,
         },
         {
           key: "adminClaims",
           label: "จัดการคำขอเคลม",
           icon: "🛠️",
+          iconBg: "#FDECD8",
+          iconColor: "#C2660A",
           onPress: onAdminClaims,
         },
         {
           key: "adminDiscounts",
           label: "จัดการส่วนลด",
           icon: "🏷️",
+          iconBg: "#FEF3C7",
+          iconColor: "#D97706",
           onPress: onAdminDiscounts,
         },
         {
           key: "adminCoinRewards",
           label: "จัดการร้านค้าเหรียญ",
           icon: "🎁",
+          iconBg: "#FBE2E1",
+          iconColor: "#C0392B",
           onPress: onAdminCoinRewards,
         },
       ]
     : [];
 
   const accountActions: MenuAction[] = [
-    { key: "profile", label: "ตั้งค่าโปรไฟล์", icon: "👤", onPress: onProfile },
-    { key: "orders", label: "ประวัติการสั่งซื้อ", icon: "🧾", onPress: onOrders },
-    { key: "coins", label: "เหรียญสะสม", icon: "🪙", onPress: onCoins },
-    { key: "coinShop", label: "ร้านค้าเหรียญ", icon: "🎟️", onPress: onCoinShop },
+    {
+      key: "profile",
+      label: "ตั้งค่าโปรไฟล์",
+      icon: "👤",
+      iconBg: "#EDE4FB",
+      iconColor: "#6D28D9",
+      onPress: onProfile,
+    },
+    {
+      key: "orders",
+      label: "ประวัติการสั่งซื้อ",
+      icon: "🧾",
+      iconBg: "#E4ECFB",
+      iconColor: "#1A56C4",
+      onPress: onOrders,
+    },
+    {
+      key: "coins",
+      label: "เหรียญสะสม",
+      icon: "🪙",
+      iconBg: "#FEF3C7",
+      iconColor: "#D97706",
+      onPress: onCoins,
+    },
+    {
+      key: "coinShop",
+      label: "ร้านค้าเหรียญ",
+      icon: "🎟️",
+      iconBg: "#FCE4EC",
+      iconColor: "#C2185B",
+      onPress: onCoinShop,
+    },
+    {
+      key: "wishlist",
+      label: "สินค้าที่ถูกใจ",
+      icon: "♡",
+      iconBg: "#FBE2E1",
+      iconColor: "#C0392B",
+      onPress: onWishlist,
+    },
     {
       key: "logout",
       label: "ออกจากระบบ",
       icon: "🚪",
+      iconBg: "#F0EDE9",
+      iconColor: "#4A3B32",
       onPress: onLogout,
       danger: true,
     },
@@ -120,13 +190,18 @@ export default function UserMenu({
     <View style={styles.wrapper}>
       <Pressable
         ref={triggerRef}
-        style={[styles.trigger, open && styles.triggerActive]}
+        style={styles.trigger}
         onPress={openMenu}
       >
-        <Text style={styles.triggerText} numberOfLines={1}>
-          {username} · {roleLabel}
-        </Text>
-        <Text style={styles.chevron}>{open ? "▲" : "▼"}</Text>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarPlaceholderText}>
+              {(username || "?").charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
       </Pressable>
 
       {/* ใช้ Modal แทนการ absolute-position ลอยเอง เพื่อให้ทำงานเหมือนกันทั้งบนเว็บและแอปมือถือจริง (iOS/Android) */}
@@ -152,7 +227,11 @@ export default function UserMenu({
                     style={styles.item}
                     onPress={() => runAction(action)}
                   >
-                    <Text style={styles.itemIcon}>{action.icon}</Text>
+                    <View style={[styles.itemIconBadge, { backgroundColor: action.iconBg }]}>
+                      <Text style={[styles.itemIcon, { color: action.iconColor }]}>
+                        {action.icon}
+                      </Text>
+                    </View>
                     <Text style={styles.itemText}>{action.label}</Text>
                   </Pressable>
                 ))}
@@ -169,7 +248,11 @@ export default function UserMenu({
                 style={styles.item}
                 onPress={() => runAction(action)}
               >
-                <Text style={styles.itemIcon}>{action.icon}</Text>
+                <View style={[styles.itemIconBadge, { backgroundColor: action.iconBg }]}>
+                  <Text style={[styles.itemIcon, { color: action.iconColor }]}>
+                    {action.icon}
+                  </Text>
+                </View>
                 <Text
                   style={[styles.itemText, action.danger && styles.itemTextDanger]}
                 >
@@ -190,33 +273,32 @@ const styles = StyleSheet.create({
   },
 
   trigger: {
-    flexDirection: "row",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    overflow: "hidden",
+  },
+
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#E8DFD8",
+  },
+
+  avatarPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#3D2619",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#F1F1EE",
-    borderWidth: 1,
-    borderColor: "transparent",
-    maxWidth: 220,
+    justifyContent: "center",
   },
 
-  triggerActive: {
-    borderColor: "#111111",
-    backgroundColor: "#FFFFFF",
-  },
-
-  triggerText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#111111",
-    flexShrink: 1,
-  },
-
-  chevron: {
-    fontSize: 8,
-    color: "#8A8A8A",
+  avatarPlaceholderText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   backdrop: {
@@ -231,9 +313,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     paddingVertical: 8,
-    shadowColor: "#111111",
+    shadowColor: "#3D2619",
     shadowOpacity: 0.14,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
@@ -259,25 +341,31 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
+  itemIconBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   itemIcon: {
-    fontSize: 15,
-    width: 18,
-    textAlign: "center",
+    fontSize: 14,
   },
 
   itemText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   itemTextDanger: {
-    color: "#B3413E",
+    color: "#C53030",
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#F0F0F0",
+    backgroundColor: "#F0EDE9",
     marginVertical: 6,
     marginHorizontal: 14,
   },

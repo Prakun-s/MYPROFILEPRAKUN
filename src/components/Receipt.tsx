@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import Icon from "./Icon";
+
 export interface ReceiptItem {
   product_name: string;
   price: number;
@@ -143,9 +145,10 @@ export default function Receipt({
       </View>
 
       {!!coinsEarned && coinsEarned > 0 && (
-        <View style={styles.coinsRow}>
+        <View style={[styles.coinsRow, styles.coinsRowInline]}>
+          <Icon name="monetization_on" size={14} color="#8A6A00" />
           <Text style={styles.coinsText}>
-            🪙 ได้รับเหรียญสะสม +{coinsEarned} เหรียญ
+            ได้รับเหรียญสะสม +{coinsEarned} เหรียญ
           </Text>
         </View>
       )}
@@ -160,21 +163,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 20,
   },
 
   shopName: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
     textAlign: "center",
     letterSpacing: 0.5,
   },
 
   receiptLabel: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     textAlign: "center",
     marginTop: 2,
     marginBottom: 14,
@@ -188,20 +191,20 @@ const styles = StyleSheet.create({
 
   metaText: {
     fontSize: 12,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     fontWeight: "600",
   },
 
   paymentMeta: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginBottom: 4,
   },
 
   dashedDivider: {
     borderTopWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#D8D8D8",
+    borderColor: "#D4C3BA",
     marginVertical: 12,
   },
 
@@ -220,19 +223,19 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 13.5,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 2,
   },
 
   itemQty: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   itemTotal: {
     fontSize: 13.5,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   vatRow: {
@@ -243,18 +246,18 @@ const styles = StyleSheet.create({
 
   vatLabel: {
     fontSize: 12.5,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   vatValue: {
     fontSize: 12.5,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   discountText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#1E8E3E",
+    color: "#2D6A4F",
   },
 
   totalRow: {
@@ -266,13 +269,13 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   totalValue: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   coinsRow: {
@@ -286,6 +289,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  coinsRowInline: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
+
   coinsText: {
     fontSize: 12.5,
     fontWeight: "700",
@@ -294,7 +303,7 @@ const styles = StyleSheet.create({
 
   footer: {
     fontSize: 11,
-    color: "#B0B0B0",
+    color: "#8A7D75",
     textAlign: "center",
     marginTop: 16,
   },

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { addToCart } from "./api";
+import Icon from "./components/Icon";
 import ProductReviews from "./components/ProductReviews";
 import { useCart } from "./context/CartContext";
 import { useWishlist } from "./context/WishlistContext";
@@ -37,6 +38,12 @@ interface Props {
   onBack: () => void;
 }
 
+function getStatusMeta(stock: number): { label: string; icon: string; color: string } {
+  if (stock < 1) return { label: "สินค้าหมด", icon: "close", color: "#C53030" };
+  if (stock < 5) return { label: "เหลือน้อย รีบสั่งเลย", icon: "warning", color: "#D97706" };
+  return { label: "พร้อมส่งด่วน", icon: "check_circle", color: "#2D6A4F" };
+}
+
 export default function ProductDetailScreen({ product, onBack }: Props) {
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
@@ -51,6 +58,7 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
 
   const wishlisted = isWishlisted(product.id);
   const outOfStock = product.stock < 1;
+  const statusMeta = getStatusMeta(product.stock);
 
   // ยังไม่มีคอลัมน์ description จริงใน DB เลยปั้นคำอธิบายจากข้อมูลที่มีอยู่แทน
   const description =
@@ -64,9 +72,7 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
 
   const specs = [
     { label: "หมวดหมู่", value: product.category || "-" },
-    { label: "ราคา", value: `฿${Number(product.price).toLocaleString("th-TH")}` },
     { label: "สต๊อกคงเหลือ", value: product.stock_text || `${product.stock} ชิ้น` },
-    { label: "สถานะ", value: product.badge_status || "-" },
     { label: "ตำแหน่งจัดเก็บ", value: product.location_text || "-" },
   ];
 
@@ -89,107 +95,102 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-    >
-      <TouchableOpacity
-        style={styles.backLink}
-        activeOpacity={0.7}
-        onPress={onBack}
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
       >
-        <Text style={styles.backLinkText}>← กลับไปหน้าสินค้า</Text>
-      </TouchableOpacity>
+        <View style={[styles.layout, isWide && styles.layoutWide]}>
+          <View style={[styles.imageWrap, isWide && styles.imageWrapWide]}>
+            {product.image_url ? (
+              <Image
+                source={{ uri: product.image_url }}
+                style={styles.image}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.image, { backgroundColor: "#E8DFD8" }]} />
+            )}
 
-      <View style={[styles.layout, isWide && styles.layoutWide]}>
-        <View style={[styles.imageWrap, isWide && styles.imageWrapWide]}>
-          {product.image_url ? (
-            <Image
-              source={{ uri: product.image_url }}
-              style={styles.image}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.image, { backgroundColor: "#EDEDED" }]} />
-          )}
-
-          <TouchableOpacity
-            style={styles.wishlistButton}
-            activeOpacity={0.7}
-            onPress={() =>
-              toggleWishlist({
-                id: product.id,
-                name: product.name,
-                price: product.price,
-                image_url: product.image_url,
-                category: product.category,
-                stock: product.stock,
-                badge_status: product.badge_status,
-              })
-            }
-          >
-            <Text
-              style={[
-                styles.wishlistIcon,
-                wishlisted && styles.wishlistIconActive,
-              ]}
+            <TouchableOpacity
+              style={styles.backOverlayButton}
+              activeOpacity={0.7}
+              onPress={onBack}
             >
-              {wishlisted ? "♥" : "♡"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <Icon name="arrow_back" size={20} color="#3D2619" />
+            </TouchableOpacity>
 
-        <View style={[styles.info, isWide && styles.infoWide]}>
-          <Text style={styles.category} numberOfLines={1}>
-            {product.category}
-          </Text>
-
-          <Text style={styles.name}>{product.name}</Text>
-
-          <Text style={styles.price}>
-            ฿{Number(product.price).toLocaleString("th-TH")}
-          </Text>
-          <Text style={styles.vatNote}>
-            ราคานี้รวม VAT 7% แล้ว (ราคาก่อน VAT ฿
-            {(Number(product.price) / 1.07).toLocaleString("th-TH", {
-              maximumFractionDigits: 2,
-            })}
-            )
-          </Text>
-
-          <View style={styles.badgeGroup}>
-            <Text
-              style={[
-                styles.badge,
-                product.stock < 5 ? styles.badgeStrong : styles.badgeOutline,
-              ]}
+            <TouchableOpacity
+              style={styles.wishlistButton}
+              activeOpacity={0.7}
+              onPress={() =>
+                toggleWishlist({
+                  id: product.id,
+                  name: product.name,
+                  price: product.price,
+                  image_url: product.image_url,
+                  category: product.category,
+                  stock: product.stock,
+                  badge_status: product.badge_status,
+                })
+              }
             >
-              {product.badge_status}
-            </Text>
+              <Icon
+                name="favorite"
+                filled={wishlisted}
+                size={19}
+                color={wishlisted ? "#D2585F" : "#3D2619"}
+              />
+            </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionTitle}>รายละเอียดสินค้า</Text>
-          <Text style={styles.description}>{description}</Text>
+          <View style={[styles.info, isWide && styles.infoWide]}>
+            <Text style={styles.category} numberOfLines={1}>
+              {product.category}
+            </Text>
 
-          <Text style={styles.sectionTitle}>สเปค</Text>
-          <View style={styles.specTable}>
-            {specs.map((spec, index) => (
-              <View
-                key={spec.label}
-                style={[
-                  styles.specRow,
-                  index === specs.length - 1 && styles.specRowLast,
-                ]}
-              >
-                <Text style={styles.specLabel}>{spec.label}</Text>
-                <Text style={styles.specValue}>{spec.value}</Text>
+            <Text style={styles.name}>{product.name}</Text>
+
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>
+                ฿{Number(product.price).toLocaleString("th-TH")}
+              </Text>
+
+              <View style={[styles.statusPill, { backgroundColor: statusMeta.color + "1A" }]}>
+                <Icon name={statusMeta.icon} size={13} color={statusMeta.color} />
+                <Text style={[styles.statusPillText, { color: statusMeta.color }]}>
+                  {statusMeta.label}
+                </Text>
               </View>
-            ))}
-          </View>
+            </View>
+            <Text style={styles.vatNote}>
+              ราคานี้รวม VAT 7% แล้ว (ก่อน VAT ฿
+              {(Number(product.price) / 1.07).toLocaleString("th-TH", {
+                maximumFractionDigits: 2,
+              })}
+              )
+            </Text>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Text style={styles.sectionTitle}>รายละเอียดสินค้า</Text>
+            <Text style={styles.description}>{description}</Text>
 
-          <View style={styles.actionsRow}>
+            <Text style={styles.sectionTitle}>ข้อมูลสินค้า</Text>
+            <View style={styles.specTable}>
+              {specs.map((spec, index) => (
+                <View
+                  key={spec.label}
+                  style={[
+                    styles.specRow,
+                    index === specs.length - 1 && styles.specRowLast,
+                  ]}
+                >
+                  <Text style={styles.specLabel}>{spec.label}</Text>
+                  <Text style={styles.specValue}>{spec.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.sectionTitle}>จำนวน</Text>
             <View style={styles.stepper}>
               <TouchableOpacity
                 style={styles.stepButton}
@@ -212,58 +213,86 @@ export default function ProductDetailScreen({ product, onBack }: Props) {
               >
                 <Text style={styles.stepButtonText}>+</Text>
               </TouchableOpacity>
+
+              <Text style={styles.stepperHint}>
+                {outOfStock ? "สินค้าหมดชั่วคราว" : `มีสินค้า ${product.stock} ชิ้น`}
+              </Text>
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.cartButton,
-                (outOfStock || adding) && styles.cartButtonDisabled,
-              ]}
-              activeOpacity={0.8}
-              disabled={outOfStock || adding}
-              onPress={handleAddToCart}
-            >
-              {adding ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.cartButtonText}>
-                  {outOfStock
-                    ? "สินค้าหมด"
-                    : added
-                    ? "✓ เพิ่มลงตะกร้าแล้ว"
-                    : "หยิบใส่ตะกร้า"}
-                </Text>
-              )}
-            </TouchableOpacity>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
         </View>
-      </View>
 
-      <ProductReviews productId={product.id} />
-    </ScrollView>
+        <ProductReviews productId={product.id} />
+      </ScrollView>
+
+      {/* แถบปุ่มลอยด้านล่าง: หัวใจ + หยิบใส่ตะกร้า (พร้อมราคา) */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.bottomWishlistButton}
+          activeOpacity={0.7}
+          onPress={() =>
+            toggleWishlist({
+              id: product.id,
+              name: product.name,
+              price: product.price,
+              image_url: product.image_url,
+              category: product.category,
+              stock: product.stock,
+              badge_status: product.badge_status,
+            })
+          }
+        >
+          <Icon
+            name="favorite"
+            filled={wishlisted}
+            size={20}
+            color={wishlisted ? "#D2585F" : "#3D2619"}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.cartButton,
+            (outOfStock || adding) && styles.cartButtonDisabled,
+          ]}
+          activeOpacity={0.8}
+          disabled={outOfStock || adding}
+          onPress={handleAddToCart}
+        >
+          {adding ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : outOfStock ? (
+            <Text style={styles.cartButtonText}>สินค้าหมด</Text>
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Icon name={added ? "check" : "shopping_cart"} size={16} color="#FFFFFF" weight={700} />
+              <Text style={styles.cartButtonText}>
+                {added
+                  ? "เพิ่มลงตะกร้าแล้ว"
+                  : `เพิ่มลงตะกร้า · ฿${Number(product.price * quantity).toLocaleString("th-TH")}`}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#F0E9DC",
+  },
+
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
   },
 
   content: {
     padding: 20,
-    paddingBottom: 60,
-  },
-
-  backLink: {
-    marginBottom: 16,
-    alignSelf: "flex-start",
-  },
-
-  backLinkText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111111",
+    paddingBottom: 40,
   },
 
   layout: {
@@ -289,7 +318,25 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     borderRadius: 18,
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#F0EDE9",
+  },
+
+  backOverlayButton: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  backOverlayIcon: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3D2619",
   },
 
   wishlistButton: {
@@ -306,7 +353,7 @@ const styles = StyleSheet.create({
 
   wishlistIcon: {
     fontSize: 22,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   wishlistIconActive: {
@@ -324,7 +371,7 @@ const styles = StyleSheet.create({
 
   category: {
     fontSize: 12,
-    color: "#9A9A9A",
+    color: "#8A7D75",
     textTransform: "uppercase",
     letterSpacing: 0.4,
     marginBottom: 6,
@@ -333,54 +380,49 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 10,
     letterSpacing: -0.3,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
   },
 
   price: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#111111",
-    marginBottom: 2,
+    color: "#3D2619",
+  },
+
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+
+  statusPillText: {
+    fontSize: 11.5,
+    fontWeight: "700",
   },
 
   vatNote: {
     fontSize: 12,
-    color: "#8A8A8A",
-    marginBottom: 12,
-  },
-
-  badgeGroup: {
-    flexDirection: "row",
-    marginBottom: 22,
-  },
-
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: "600",
-    overflow: "hidden",
-  },
-
-  badgeOutline: {
-    borderWidth: 1,
-    borderColor: "#D8D8D8",
-    color: "#4A4A4A",
-    backgroundColor: "transparent",
-  },
-
-  badgeStrong: {
-    backgroundColor: "#111111",
-    color: "#FFFFFF",
+    color: "#8A7D75",
+    marginTop: 6,
+    marginBottom: 20,
   },
 
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 8,
     marginTop: 6,
   },
@@ -395,9 +437,9 @@ const styles = StyleSheet.create({
   specTable: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     backgroundColor: "#FFFFFF",
-    marginBottom: 24,
+    marginBottom: 22,
     overflow: "hidden",
   },
 
@@ -407,7 +449,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F1F1",
+    borderBottomColor: "#F0EDE9",
   },
 
   specRowLast: {
@@ -416,25 +458,19 @@ const styles = StyleSheet.create({
 
   specLabel: {
     fontSize: 13,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   specValue: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   error: {
     fontSize: 13,
-    color: "#B3413E",
-    marginBottom: 12,
-  },
-
-  actionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+    color: "#C53030",
+    marginTop: 4,
   },
 
   stepper: {
@@ -442,10 +478,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    alignSelf: "flex-start",
   },
 
   stepButton: {
@@ -459,20 +496,52 @@ const styles = StyleSheet.create({
   stepButtonText: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   stepValue: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     minWidth: 20,
     textAlign: "center",
   },
 
+  stepperHint: {
+    fontSize: 11.5,
+    color: "#8A7D75",
+    marginLeft: 6,
+  },
+
+  bottomBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E8DFD8",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+
+  bottomWishlistButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#3D2619",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  bottomWishlistIcon: {
+    fontSize: 20,
+    color: "#3D2619",
+  },
+
   cartButton: {
     flex: 1,
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: "center",

@@ -20,6 +20,7 @@ import {
 
 import { addToCart, fetchProducts } from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
+import Icon from "./components/Icon";
 import SkeletonCard from "./components/SkeletonCard";
 import Toast from "./components/Toast";
 import { useCart } from "./context/CartContext";
@@ -51,6 +52,14 @@ function getBrand(name: string): BrandOption | null {
   return (
     BRAND_OPTIONS.find((brand) => lower.includes(brand.toLowerCase())) ?? null
   );
+}
+
+// ป้ายสถานะสต๊อกแบบไทย ใช้ซ้อนบนรูปสินค้า (พร้อมส่ง / เหลือน้อย / สินค้าหมด)
+// อิงจากจำนวนสต๊อกจริงเป็นหลัก ไม่ใช้ badge_status ดิบจาก backend (ภาษาอังกฤษ) ตรงๆ
+function getStatusMeta(stock: number): { label: string; bg: string; color: string } {
+  if (stock < 1) return { label: "สินค้าหมด", bg: "#EDEDED", color: "#50453E" };
+  if (stock < 5) return { label: "เหลือน้อย", bg: "#FEF3C7", color: "#D97706" };
+  return { label: "พร้อมส่ง", bg: "#E7F6EC", color: "#2D6A4F" };
 }
 
 // ช่วงราคาสำหรับตัวกรอง อิงตัวเลขเบรกพอยต์ 30,000 / 50,000 / 80,000
@@ -296,7 +305,7 @@ function HeroCarousel({
                 />
               ) : (
                 <View
-                  style={[styles.heroSlideImage, { backgroundColor: "#2A2A2A" }]}
+                  style={[styles.heroSlideImage, { backgroundColor: "#2B2118" }]}
                 />
               )}
 
@@ -352,17 +361,54 @@ function HeroCarousel({
             goTo(indexRef.current === 0 ? total - 1 : indexRef.current - 1)
           }
         >
-          <Text style={styles.heroArrowText}>‹</Text>
+          <Icon name="chevron_left" size={28} color="#FFFFFF" />
         </Pressable>
 
         <Pressable
           style={[styles.heroArrow, styles.heroArrowRight]}
           onPress={() => goTo(indexRef.current + 1)}
         >
-          <Text style={styles.heroArrowText}>›</Text>
+          <Icon name="chevron_right" size={28} color="#FFFFFF" />
         </Pressable>
       </Pressable>
     </Animated.View>
+  );
+}
+
+// การ์ดโปรโมชันแบบสถิต (ไม่เลื่อนอัตโนมัติ) อยู่บนสุดของหน้า ตรงกับดีไซน์ mockup ที่ได้รับมา
+function PromoBanner({ onShopNow }: { onShopNow: () => void }) {
+  return (
+    <View style={styles.promoBanner}>
+      {/* เลเยอร์จำลองเฉดไล่สี (ไม่ใช้ไลบรารีเพิ่ม): แสงนวลมุมบนซ้าย + เงาเข้มมุมล่างขวา ให้ดูมีมิติ/หรูขึ้น */}
+      <View pointerEvents="none" style={styles.promoBannerGlow} />
+      <View pointerEvents="none" style={styles.promoBannerShade} />
+
+      <View style={styles.promoTag}>
+        <Icon name="photo_camera" size={11} color="#EABDA0" />
+        <Text style={styles.promoTagText}>NEW ARRIVALS 2026</Text>
+      </View>
+
+      <Text style={styles.promoTitle}>ต้อนรับคอลเลกชันใหม่{"\n"}ลดสูงสุด 15%</Text>
+
+      <Text style={styles.promoSubtitle}>
+        รับเหรียญสะสม PRAKUN Coin คูณ 2 เท่า สำหรับทุกคำสั่งซื้อกล้องและเลนส์วันนี้
+      </Text>
+
+      <View style={styles.promoRow}>
+        <TouchableOpacity
+          style={styles.promoButton}
+          activeOpacity={0.8}
+          onPress={onShopNow}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <Text style={styles.promoButtonText}>ช้อปเลยตอนนี้</Text>
+            <Icon name="arrow_forward" size={14} color="#2D1604" />
+          </View>
+        </TouchableOpacity>
+
+        <Text style={styles.promoEndDate}>สิ้นสุด 31 ธ.ค.</Text>
+      </View>
+    </View>
   );
 }
 
@@ -383,7 +429,7 @@ function FilterSection({
         onPress={() => setOpen((o) => !o)}
       >
         <Text style={styles.filterSectionTitle}>{title}</Text>
-        <Text style={styles.filterSectionToggle}>{open ? "－" : "+"}</Text>
+        <Icon name={open ? "remove" : "add"} size={16} color="#8A7D75" />
       </Pressable>
 
       {open && <View style={styles.filterSectionBody}>{children}</View>}
@@ -403,7 +449,7 @@ function FilterCheckbox({
   return (
     <Pressable style={styles.filterRow} onPress={onPress}>
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-        {checked && <Text style={styles.checkboxMark}>✓</Text>}
+        {checked && <Icon name="check" size={12} color="#FFFFFF" weight={700} />}
       </View>
       <Text style={styles.filterLabel}>{label}</Text>
     </Pressable>
@@ -504,7 +550,7 @@ function SortDropdown({
         <Text style={styles.sortButtonText} numberOfLines={1}>
           {current.label}
         </Text>
-        <Text style={styles.sortButtonCaret}>{open ? "▲" : "▼"}</Text>
+        <Icon name={open ? "expand_less" : "expand_more"} size={16} color="#8A7D75" />
       </TouchableOpacity>
 
       <Modal
@@ -551,7 +597,7 @@ function SortDropdown({
                   </Text>
 
                   {option.id === value && (
-                    <Text style={styles.sortMenuItemCheck}>✓</Text>
+                    <Icon name="check" size={14} color="#3D2619" weight={700} />
                   )}
                 </Pressable>
               ))}
@@ -674,6 +720,8 @@ export default function ProductListScreen({
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedPriceBands, setSelectedPriceBands] = useState<string[]>([]);
+  // ชิปหมวดหมู่แนวนอนด้านบนกริดสินค้า (คนละส่วนกับแผงตัวกรองแบรนด์/ราคา)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const toggleBrand = (brand: string) => {
     setSelectedBrands((prev) =>
@@ -709,9 +757,22 @@ export default function ProductListScreen({
           return band ? band.test(Number(product.price) || 0) : false;
         });
 
-      return brandMatch && priceMatch;
+      const categoryMatch =
+        !selectedCategory || product.category === selectedCategory;
+
+      return brandMatch && priceMatch && categoryMatch;
     });
-  }, [searchedProducts, selectedBrands, selectedPriceBands]);
+  }, [searchedProducts, selectedBrands, selectedPriceBands, selectedCategory]);
+
+  // รายชื่อหมวดหมู่จริงที่มีอยู่ในสินค้าตอนนี้ เรียงตามความถี่ (หมวดที่มีสินค้าเยอะสุดอยู่ก่อน)
+  const categoryChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      if (!p.category) continue;
+      counts.set(p.category, (counts.get(p.category) || 0) + 1);
+    }
+    return Array.from(counts.keys()).sort((a, b) => (counts.get(b)! - counts.get(a)!));
+  }, [products]);
 
   // ===== เรียงลำดับสินค้า =====
   const [sortId, setSortId] = useState<SortId>("newest");
@@ -801,6 +862,7 @@ export default function ProductListScreen({
 
   const renderProduct = ({ item }: { item: Product }) => {
     const tier = priceTierById.get(item.id);
+    const statusMeta = getStatusMeta(item.stock);
 
     const wishlisted = isWishlisted(item.id);
 
@@ -815,6 +877,12 @@ export default function ProductListScreen({
             style={[styles.image, { height: cardWidth }]}
             resizeMode="cover"
           />
+
+          <View style={[styles.statusChip, { backgroundColor: statusMeta.bg }]}>
+            <Text style={[styles.statusChipText, { color: statusMeta.color }]}>
+              {statusMeta.label}
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={styles.wishlistChip}
@@ -832,14 +900,12 @@ export default function ProductListScreen({
               });
             }}
           >
-            <Text
-              style={[
-                styles.wishlistChipIcon,
-                wishlisted && styles.wishlistChipIconActive,
-              ]}
-            >
-              {wishlisted ? "♥" : "♡"}
-            </Text>
+            <Icon
+              name="favorite"
+              filled={wishlisted}
+              size={16}
+              color={wishlisted ? "#D2585F" : "#3D2619"}
+            />
           </TouchableOpacity>
 
           {canManage && (
@@ -870,22 +936,11 @@ export default function ProductListScreen({
           </Text>
           <Text style={styles.vatNote}>ราคานี้รวม VAT 7% แล้ว</Text>
 
-          <View style={styles.badgeGroup}>
-            <Text
-              style={[
-                styles.badge,
-                item.stock < 5 ? styles.badgeStrong : styles.badgeOutline,
-              ]}
-            >
-              {item.badge_status}
-            </Text>
-
-            {tier && (
-              <Text style={[styles.badge, styles.badgeOutline]}>
-                {tier}
-              </Text>
-            )}
-          </View>
+          {tier && (
+            <View style={styles.badgeGroup}>
+              <Text style={[styles.badge, styles.badgeOutline]}>{tier}</Text>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[
@@ -902,14 +957,20 @@ export default function ProductListScreen({
           >
             {addingId === item.id ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : item.stock < 1 ? (
+              <Text style={styles.cartButtonText}>สินค้าหมด</Text>
             ) : (
-              <Text style={styles.cartButtonText}>
-                {item.stock < 1
-                  ? "สินค้าหมด"
-                  : addedId === item.id
-                  ? "✓ เพิ่มแล้ว"
-                  : "หยิบใส่ตะกร้า"}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <Icon
+                  name={addedId === item.id ? "check" : "shopping_cart"}
+                  size={13}
+                  color="#FFFFFF"
+                  weight={700}
+                />
+                <Text style={styles.cartButtonText}>
+                  {addedId === item.id ? "เพิ่มแล้ว" : "เพิ่มลงตะกร้า"}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -924,7 +985,7 @@ export default function ProductListScreen({
               disabled={deletingId === item.id}
             >
               {deletingId === item.id ? (
-                <ActivityIndicator size="small" color="#111111" />
+                <ActivityIndicator size="small" color="#3D2619" />
               ) : (
                 <Text style={styles.deleteLinkText}>ลบสินค้า</Text>
               )}
@@ -952,14 +1013,14 @@ export default function ProductListScreen({
 
     return (
       <View style={styles.container}>
-        <View style={[styles.hero, { height: width >= 1100 ? 640 : width >= 700 ? 480 : 340 }]} />
+        <View style={[styles.hero, { height: 200 }]} />
 
         <View style={styles.bodyRow}>
           {isWideLayout && <View style={styles.sidebar} />}
 
           <View style={styles.content}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>All Products</Text>
+              <Text style={styles.sectionTitle}>รายการสินค้าคัดสรร</Text>
             </View>
 
             <View style={styles.list}>
@@ -994,7 +1055,7 @@ export default function ProductListScreen({
           onPress={() => loadProducts()}
         >
           <Text style={styles.retryText}>
-            Retry
+            ลองใหม่
           </Text>
         </TouchableOpacity>
 
@@ -1013,7 +1074,13 @@ export default function ProductListScreen({
         }
       >
         {/* HERO CAROUSEL: เต็มความกว้างจอ อยู่เหนือแผงตัวกรอง+กริดสินค้า */}
-        <HeroCarousel products={products} containerWidth={width} />
+        <PromoBanner
+          onShopNow={() => {
+            setSearchText("");
+            clearAllFilters();
+            setSelectedCategory(null);
+          }}
+        />
 
         <View style={styles.bodyRow}>
           {/* แผงตัวกรองปักซ้าย โชว์เฉพาะจอกว้างพอ (เดสก์ท็อป/แท็บเล็ต) เลื่อนลงไปพร้อมกับหน้าทั้งหมด */}
@@ -1032,7 +1099,7 @@ export default function ProductListScreen({
           <View style={styles.content}>
             {/* SEARCH */}
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>All Products</Text>
+              <Text style={styles.sectionTitle}>รายการสินค้าคัดสรร</Text>
 
               <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                 <SortDropdown value={sortId} onChange={setSortId} />
@@ -1068,14 +1135,14 @@ export default function ProductListScreen({
                   activeOpacity={0.7}
                   onPress={() => loadProducts()}
                 >
-                  <Text style={styles.refreshText}>Refresh</Text>
+                  <Text style={styles.refreshText}>รีเฟรช</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {canManage && lowStockCount > 0 && (
               <View style={styles.lowStockBanner}>
-                <Text style={styles.lowStockBannerIcon}>⚠️</Text>
+                <Icon name="warning" size={14} color="#C53030" />
                 <Text style={styles.lowStockBannerText}>
                   มีสินค้าใกล้หมดสต๊อก {lowStockCount} รายการ (เหลือต่ำกว่า 5 ชิ้น)
                 </Text>
@@ -1086,7 +1153,7 @@ export default function ProductListScreen({
               <TextInput
                 style={styles.searchInput}
                 placeholder="ค้นหาสินค้า ชื่อ, หมวดหมู่, ตำแหน่ง..."
-                placeholderTextColor="#A9A8A2"
+                placeholderTextColor="#8A7D75"
                 value={searchText}
                 onChangeText={setSearchText}
               />
@@ -1097,10 +1164,57 @@ export default function ProductListScreen({
                   activeOpacity={0.7}
                   onPress={() => setSearchText("")}
                 >
-                  <Text style={styles.clearButtonText}>✕</Text>
+                  <Icon name="close" size={14} color="#8A7D75" weight={600} />
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* ชิปหมวดหมู่เลื่อนแนวนอน: กดเพื่อกรองด่วน แยกจากแผงตัวกรองละเอียด (แบรนด์/ราคา) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryChipRow}
+              contentContainerStyle={styles.categoryChipRowContent}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.categoryChip,
+                  !selectedCategory && styles.categoryChipActive,
+                ]}
+                activeOpacity={0.7}
+                onPress={() => setSelectedCategory(null)}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    !selectedCategory && styles.categoryChipTextActive,
+                  ]}
+                >
+                  ทั้งหมด
+                </Text>
+              </TouchableOpacity>
+
+              {categoryChips.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryChip,
+                    selectedCategory === cat && styles.categoryChipActive,
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => setSelectedCategory(cat)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      selectedCategory === cat && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {!isWideLayout && filterOpen && (
               <View style={{ marginHorizontal: CONTAINER_PADDING }}>
@@ -1117,7 +1231,7 @@ export default function ProductListScreen({
             <Text style={styles.count}>
               {searchText || hasActiveFilters
                 ? `พบ ${sortedProducts.length} จาก ${products.length} รายการ`
-                : `${products.length} Products`}
+                : `${products.length} รายการ`}
             </Text>
 
             {/* GRID สินค้า: เรนเดอร์เป็นแถวๆ ธรรมดา ไม่ใช้ FlatList
@@ -1181,7 +1295,7 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   center: {
@@ -1189,7 +1303,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   // ===== SIDEBAR LAYOUT =====
@@ -1210,9 +1324,99 @@ const styles = StyleSheet.create({
 
   // ===== HERO CAROUSEL =====
   hero: {
-    backgroundColor: "#111111",
+    backgroundColor: "#2D1B10",
     marginBottom: 26,
     overflow: "hidden",
+  },
+
+  promoBanner: {
+    backgroundColor: "#2D1B10",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: CONTAINER_PADDING,
+    marginTop: 16,
+    marginBottom: 20,
+    overflow: "hidden",
+  },
+
+  // แสงนวลมุมบนซ้าย (วงกลมโปร่งแสงขนาดใหญ่ เลื่อนออกนอกกรอบบางส่วน) จำลองเฉดไล่สีแบบไม่ใช้ไลบรารีเพิ่ม
+  promoBannerGlow: {
+    position: "absolute",
+    top: -60,
+    left: -40,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(234, 189, 160, 0.16)",
+  },
+
+  // เงาเข้มมุมล่างขวา ให้พื้นหลังดูลึกและหรูขึ้น
+  promoBannerShade: {
+    position: "absolute",
+    bottom: -70,
+    right: -50,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+  },
+
+  promoTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+
+  promoTagText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#EABDA0",
+    letterSpacing: 0.4,
+  },
+
+  promoTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    lineHeight: 28,
+    marginBottom: 8,
+  },
+
+  promoSubtitle: {
+    fontSize: 12.5,
+    color: "#E8DFD8",
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+
+  promoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  promoButton: {
+    backgroundColor: "#EABDA0",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
+  promoButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2D1604",
+  },
+
+  promoEndDate: {
+    fontSize: 11.5,
+    color: "#C9BBB0",
   },
 
   heroPressArea: {
@@ -1269,7 +1473,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     letterSpacing: 2,
-    color: "#D8D8D8",
+    color: "#D4C3BA",
     marginBottom: 10,
   },
 
@@ -1291,7 +1495,7 @@ const styles = StyleSheet.create({
 
   heroSubtitle: {
     fontSize: 15,
-    color: "#C9C9C9",
+    color: "#D4C3BA",
   },
 
   heroDots: {
@@ -1353,7 +1557,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     letterSpacing: -0.3,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   refreshButton: {
@@ -1362,18 +1566,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E8DFD8",
   },
 
   refreshText: {
     fontWeight: "500",
     fontSize: 13,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   filterButtonActive: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
+    backgroundColor: "#3D2619",
+    borderColor: "#3D2619",
   },
 
   filterButtonActiveText: {
@@ -1390,19 +1594,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E8DFD8",
     maxWidth: 200,
   },
 
   sortButtonText: {
     fontWeight: "500",
     fontSize: 13,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   sortButtonCaret: {
     fontSize: 9,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   sortOverlay: {
@@ -1414,9 +1618,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     paddingVertical: 6,
-    shadowColor: "#111111",
+    shadowColor: "#3D2619",
     shadowOpacity: 0.12,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
@@ -1437,18 +1641,18 @@ const styles = StyleSheet.create({
 
   sortMenuItemText: {
     fontSize: 13,
-    color: "#333333",
+    color: "#2B2118",
   },
 
   sortMenuItemTextActive: {
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   sortMenuItemCheck: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   // ===== FILTER PANEL =====
@@ -1457,7 +1661,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     backgroundColor: "#FFFFFF",
   },
 
@@ -1468,25 +1672,25 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     marginBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#EDEDED",
+    borderBottomColor: "#E8DFD8",
   },
 
   filterHeaderTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   filterClearAll: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#D32F2F",
+    color: "#C53030",
   },
 
   filterSection: {
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: "#F0EDE9",
   },
 
   filterSectionHeader: {
@@ -1498,12 +1702,12 @@ const styles = StyleSheet.create({
   filterSectionTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   filterSectionToggle: {
     fontSize: 16,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     width: 20,
     textAlign: "center",
   },
@@ -1524,15 +1728,15 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: "#C9C9C9",
+    borderColor: "#D4C3BA",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
   },
 
   checkboxChecked: {
-    backgroundColor: "#D32F2F",
-    borderColor: "#D32F2F",
+    backgroundColor: "#C53030",
+    borderColor: "#C53030",
   },
 
   checkboxMark: {
@@ -1544,13 +1748,13 @@ const styles = StyleSheet.create({
 
   filterLabel: {
     fontSize: 14,
-    color: "#333333",
+    color: "#2B2118",
   },
 
   count: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#8A8A8A",
+    color: "#8A7D75",
     paddingHorizontal: CONTAINER_PADDING,
     marginBottom: 14,
   },
@@ -1576,7 +1780,7 @@ const styles = StyleSheet.create({
   lowStockBannerText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#B3413E",
+    color: "#C53030",
     flex: 1,
   },
 
@@ -1588,7 +1792,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E8DFD8",
     paddingHorizontal: 12,
   },
 
@@ -1596,7 +1800,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     fontSize: 14,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   clearButton: {
@@ -1606,8 +1810,43 @@ const styles = StyleSheet.create({
 
   clearButtonText: {
     fontSize: 14,
-    color: "#A9A9A9",
+    color: "#8A7D75",
     fontWeight: "600",
+  },
+
+  categoryChipRow: {
+    marginBottom: 14,
+  },
+
+  categoryChipRowContent: {
+    paddingHorizontal: CONTAINER_PADDING,
+    gap: 8,
+  },
+
+  categoryChip: {
+    height: 36,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E8DFD8",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  categoryChipActive: {
+    backgroundColor: "#3D2619",
+    borderColor: "#3D2619",
+  },
+
+  categoryChipText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#4A3B32",
+  },
+
+  categoryChipTextActive: {
+    color: "#FFFFFF",
   },
 
   emptyState: {
@@ -1617,7 +1856,7 @@ const styles = StyleSheet.create({
 
   emptyStateText: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     textAlign: "center",
   },
 
@@ -1638,14 +1877,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     overflow: "hidden",
   },
 
   // สไตล์ตอนเอาเมาส์ไปชี้: ขอบเข้มขึ้น + มีเงาลอยขึ้นมา
   cardHovered: {
-    borderColor: "#D6D6D6",
-    shadowColor: "#111111",
+    borderColor: "#D4C3BA",
+    shadowColor: "#3D2619",
     shadowOpacity: 0.18,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
@@ -1658,12 +1897,12 @@ const styles = StyleSheet.create({
 
   image: {
     width: "100%",
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#F0EDE9",
   },
 
   editChip: {
     position: "absolute",
-    top: 8,
+    top: 44,
     right: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1674,13 +1913,13 @@ const styles = StyleSheet.create({
   editChipText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   wishlistChip: {
     position: "absolute",
     top: 8,
-    left: 8,
+    right: 8,
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -1689,9 +1928,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  statusChip: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+
+  statusChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
   wishlistChipIcon: {
     fontSize: 16,
-    color: "#111111",
+    color: "#3D2619",
   },
 
   wishlistChipIconActive: {
@@ -1704,7 +1957,7 @@ const styles = StyleSheet.create({
 
   category: {
     fontSize: 11,
-    color: "#9A9A9A",
+    color: "#8A7D75",
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.3,
@@ -1713,7 +1966,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 4,
     minHeight: 34,
   },
@@ -1721,13 +1974,13 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 2,
   },
 
   vatNote: {
     fontSize: 10.5,
-    color: "#B0B0B0",
+    color: "#8A7D75",
     marginBottom: 8,
   },
 
@@ -1748,19 +2001,19 @@ const styles = StyleSheet.create({
 
   badgeOutline: {
     borderWidth: 1,
-    borderColor: "#D8D8D8",
-    color: "#4A4A4A",
+    borderColor: "#D4C3BA",
+    color: "#4A3B32",
     backgroundColor: "transparent",
   },
 
   badgeStrong: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     color: "#FFFFFF",
   },
 
   cartButton: {
     marginTop: 8,
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: "center",
@@ -1783,31 +2036,31 @@ const styles = StyleSheet.create({
   deleteLinkText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#B3413E",
+    color: "#C53030",
   },
 
   loadingText: {
     marginTop: 10,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     fontSize: 14,
   },
 
   error: {
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
     marginBottom: 15,
     fontSize: 14,
   },
 
   retryButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingHorizontal: 20,
     paddingVertical: 11,
     borderRadius: 10,
   },
 
   retryText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 14,
   },

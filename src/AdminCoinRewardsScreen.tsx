@@ -19,6 +19,7 @@ import {
   toggleCoinReward,
 } from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
+import Icon from "./components/Icon";
 import Toast from "./components/Toast";
 
 // หน้าแอดมินจัดการ "ร้านค้าเหรียญ": ตั้งว่าจะให้ลูกค้าแลกเหรียญสะสมเป็นป้ายส่วนลดอะไรได้บ้าง
@@ -322,15 +323,18 @@ export default function AdminCoinRewardsScreen() {
               </View>
             </View>
 
-            <Text style={styles.rewardMeta}>
-              🪙 {item.coin_cost} เหรียญ ·{" "}
-              {item.discount_type === "percent"
-                ? `ลด ${item.discount_value}%`
-                : `ลด ฿${Number(item.discount_value).toLocaleString("th-TH")}`}
-              {item.max_discount_amount
-                ? ` (สูงสุด ฿${Number(item.max_discount_amount).toLocaleString("th-TH")})`
-                : ""}
-            </Text>
+            <View style={styles.buttonInlineRow}>
+              <Icon name="monetization_on" size={12} color="#8A7D75" />
+              <Text style={styles.rewardMeta}>
+                {item.coin_cost} เหรียญ ·{" "}
+                {item.discount_type === "percent"
+                  ? `ลด ${item.discount_value}%`
+                  : `ลด ฿${Number(item.discount_value).toLocaleString("th-TH")}`}
+                {item.max_discount_amount
+                  ? ` (สูงสุด ฿${Number(item.max_discount_amount).toLocaleString("th-TH")})`
+                  : ""}
+              </Text>
+            </View>
 
             <Text style={styles.rewardMeta}>
               แลกไปแล้ว {item.redeemed_count} {item.stock ? `/ ${item.stock} ชิ้น` : "ครั้ง (ไม่จำกัด)"}{" "}
@@ -361,7 +365,7 @@ export default function AdminCoinRewardsScreen() {
         ListEmptyComponent={
           loading ? (
             <View style={styles.center}>
-              <ActivityIndicator size="large" color="#111111" />
+              <ActivityIndicator size="large" color="#3D2619" />
             </View>
           ) : error ? (
             <View style={styles.center}>
@@ -403,17 +407,23 @@ const styles = StyleSheet.create({
     padding: 40,
   },
 
+  buttonInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
   list: {
     padding: 16,
     flexGrow: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   formCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 18,
     marginBottom: 16,
   },
@@ -421,14 +431,14 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 14,
   },
 
   sectionLabel: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 6,
     marginTop: 10,
   },
@@ -436,12 +446,12 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13.5,
-    color: "#2B2B31",
+    color: "#2B2118",
   },
 
   typeRow: {
@@ -454,19 +464,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     alignItems: "center",
   },
 
   typeChipSelected: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
+    backgroundColor: "#3D2619",
+    borderColor: "#3D2619",
   },
 
   typeChipText: {
     fontSize: 12.5,
     fontWeight: "600",
-    color: "#4A4A4A",
+    color: "#4A3B32",
   },
 
   typeChipTextSelected: {
@@ -484,12 +494,12 @@ const styles = StyleSheet.create({
 
   formErrorText: {
     fontSize: 12.5,
-    color: "#B3413E",
+    color: "#C53030",
     marginTop: 12,
   },
 
   submitButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: "center",
@@ -509,7 +519,7 @@ const styles = StyleSheet.create({
   listTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginTop: 22,
   },
 
@@ -517,7 +527,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -531,12 +541,12 @@ const styles = StyleSheet.create({
   rewardName: {
     fontSize: 14.5,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   rewardDesc: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginTop: 2,
   },
 
@@ -551,7 +561,7 @@ const styles = StyleSheet.create({
   },
 
   statusBadgeInactive: {
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#F0EDE9",
   },
 
   statusBadgeText: {
@@ -560,16 +570,16 @@ const styles = StyleSheet.create({
   },
 
   statusBadgeTextActive: {
-    color: "#1E8E3E",
+    color: "#2D6A4F",
   },
 
   statusBadgeTextInactive: {
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   rewardMeta: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginTop: 2,
   },
 
@@ -579,7 +589,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
+    borderTopColor: "#F0EDE9",
   },
 
   actionButton: {
@@ -589,21 +599,21 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#4A4A4A",
+    color: "#4A3B32",
   },
 
   actionButtonTextDanger: {
-    color: "#B3413E",
+    color: "#C53030",
   },
 
   errorText: {
     fontSize: 14,
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
   },
 
   emptyText: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 });

@@ -3,20 +3,26 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import { fetchMyOrders } from "./api";
+import { addToCart, fetchMyOrders } from "./api";
+import Icon from "./components/Icon";
 import ReceiptModal from "./components/ReceiptModal";
+import Toast from "./components/Toast";
+import { useCart } from "./context/CartContext";
 
 interface OrderItem {
   product_id: number;
   product_name: string;
   price: number;
   quantity: number;
+  image_url?: string;
 }
 
 interface Order {
@@ -30,15 +36,24 @@ interface Order {
   items: OrderItem[];
 }
 
+type StatusKey = "pending" | "shipping" | "delivered" | "cancelled";
+
 const STATUS_META: Record<
-  "pending" | "shipping" | "delivered" | "cancelled",
-  { label: string; tone: "pending" | "shipping" | "delivered" | "cancelled" }
+  StatusKey,
+  { label: string; tone: StatusKey }
 > = {
-  pending: { label: "กำลังเตรียมสินค้า", tone: "pending" },
+  pending: { label: "กำลังเตรียม", tone: "pending" },
   shipping: { label: "กำลังจัดส่ง", tone: "shipping" },
   delivered: { label: "จัดส่งสำเร็จ", tone: "delivered" },
   cancelled: { label: "ยกเลิกออเดอร์", tone: "cancelled" },
 };
+
+const TABS: { key: StatusKey | "all"; label: string }[] = [
+  { key: "all", label: "ทั้งหมด" },
+  { key: "pending", label: "กำลังเตรียม" },
+  { key: "shipping", label: "กำลังจัดส่ง" },
+  { key: "delivered", label: "สำเร็จ" },
+];
 
 // เผื่อกรณียังไม่ได้รัน migration เพิ่มคอลัมน์ status ใน DB (order.status จะเป็น undefined)
 // จำลองสถานะจากอายุของออเดอร์ไปก่อนเป็น fallback เท่านั้น
@@ -61,10 +76,24 @@ interface OrdersScreenProps {
 }
 
 export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
+  const { refreshCart } = useCart();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [tab, setTab] = useState<StatusKey | "all">("all");
+  const [reorderingId, setReorderingId] = useState<number | null>(null);
+
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastTone, setToastTone] = useState<"info" | "warning">("info");
+
+  const notify = (message: string, tone: "info" | "warning" = "info") => {
+    setToastMessage(message);
+    setToastTone(tone);
+    setToastVisible(true);
+  };
 
   useEffect(() => {
     (async () => {
@@ -80,10 +109,36 @@ export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
     })();
   }, []);
 
+  const handleReorder = async (order: Order) => {
+    setReorderingId(order.id);
+
+    try {
+      const results = await Promise.allSettled(
+        order.items.map((item) => addToCart(item.product_id, item.quantity))
+      );
+
+      const failed = results.filter((r) => r.status === "rejected").length;
+      await refreshCart();
+
+      if (failed === 0) {
+        notify("เพิ่มสินค้าทั้งหมดลงตะกร้าแล้ว");
+      } else if (failed < results.length) {
+        notify(`เพิ่มลงตะกร้าบางส่วน (สินค้า ${failed} ชิ้นอาจหมดสต๊อก)`, "warning");
+      } else {
+        notify("เพิ่มลงตะกร้าไม่สำเร็จ สินค้าอาจหมดสต๊อกแล้ว", "warning");
+      }
+    } catch (err: any) {
+      console.error("Reorder error:", err);
+      notify(err.message || "สั่งซื้ออีกครั้งไม่สำเร็จ", "warning");
+    } finally {
+      setReorderingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#111111" />
+        <ActivityIndicator size="large" color="#3D2619" />
       </View>
     );
   }
@@ -96,85 +151,167 @@ export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
     );
   }
 
+  const counts = {
+    all: orders.length,
+    pending: orders.filter((o) => getShippingStatus(o).tone === "pending").length,
+    shipping: orders.filter((o) => getShippingStatus(o).tone === "shipping").length,
+    delivered: orders.filter((o) => getShippingStatus(o).tone === "delivered").length,
+    cancelled: orders.filter((o) => getShippingStatus(o).tone === "cancelled").length,
+  };
+
+  const visibleOrders =
+    tab === "all" ? orders : orders.filter((o) => getShippingStatus(o).tone === tab);
+
   return (
     <>
       <FlatList
-        data={orders}
+        data={visibleOrders}
         keyExtractor={(order) => String(order.id)}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.tabRow}
+            contentContainerStyle={styles.tabRowContent}
+          >
+            {TABS.map((t) => {
+              const active = tab === t.key;
+              return (
+                <TouchableOpacity
+                  key={t.key}
+                  style={[styles.tabChip, active && styles.tabChipActive]}
+                  activeOpacity={0.7}
+                  onPress={() => setTab(t.key)}
+                >
+                  <Text style={[styles.tabChipText, active && styles.tabChipTextActive]}>
+                    {t.label} ({counts[t.key]})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        }
         renderItem={({ item: order }) => {
-        const status = getShippingStatus(order);
+          const status = getShippingStatus(order);
+          const firstItem = order.items[0];
+          const extraCount = order.items.length - 1;
 
-        return (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.orderId}>คำสั่งซื้อ #{order.id}</Text>
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Icon name="inventory_2" size={14} color="#3D2619" />
+                  <Text style={styles.orderId}>#PK-{order.id.toString().padStart(6, "0")}</Text>
+                </View>
 
-                <Text style={styles.orderDate}>
-                  {new Date(order.created_at).toLocaleDateString("th-TH", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                <View
+                  style={[
+                    styles.statusBadge,
+                    status.tone === "pending" && styles.statusPending,
+                    status.tone === "shipping" && styles.statusShipping,
+                    status.tone === "delivered" && styles.statusDelivered,
+                    status.tone === "cancelled" && styles.statusCancelled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      status.tone === "pending" && styles.statusPendingText,
+                      status.tone === "shipping" && styles.statusShippingText,
+                      status.tone === "delivered" && styles.statusDeliveredText,
+                      status.tone === "cancelled" && styles.statusCancelledText,
+                    ]}
+                  >
+                    ● {status.label}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.orderDate}>
+                {new Date(order.created_at).toLocaleDateString("th-TH", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+
+              <View style={styles.itemPreviewRow}>
+                <View style={styles.thumbRow}>
+                  {order.items.slice(0, 2).map((item, idx) =>
+                    item.image_url ? (
+                      <Image
+                        key={idx}
+                        source={{ uri: item.image_url }}
+                        style={[styles.thumb, idx > 0 && styles.thumbOverlap]}
+                      />
+                    ) : (
+                      <View key={idx} style={[styles.thumb, styles.thumbPlaceholder, idx > 0 && styles.thumbOverlap]} />
+                    )
+                  )}
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemName} numberOfLines={1}>
+                    {firstItem?.product_name || "สินค้า"}
+                  </Text>
+                  <Text style={styles.itemMeta}>
+                    {extraCount > 0
+                      ? `และอีก ${extraCount} รายการ · รวม ${order.items.length} รายการ`
+                      : `จำนวน ${firstItem?.quantity ?? 1} ชิ้น`}
+                  </Text>
+                </View>
+              </View>
+
+              {status.tone === "delivered" && onClaimItem && order.items.length === 1 && (
+                <TouchableOpacity
+                  style={styles.claimLink}
+                  activeOpacity={0.7}
+                  onPress={() => onClaimItem(order, order.items[0])}
+                >
+                  <Text style={styles.claimLinkText}>เคลมสินค้านี้</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>ยอดรวมทั้งสิ้น</Text>
+                <Text style={styles.totalValue}>
+                  ฿{Number(order.total_amount).toLocaleString("th-TH")}
                 </Text>
               </View>
 
-              <Text
-                style={[
-                  styles.statusBadge,
-                  status.tone === "pending" && styles.statusPending,
-                  status.tone === "shipping" && styles.statusShipping,
-                  status.tone === "delivered" && styles.statusDelivered,
-                  status.tone === "cancelled" && styles.statusCancelled,
-                ]}
-              >
-                {status.label}
-              </Text>
-            </View>
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.outlineButton}
+                  activeOpacity={0.7}
+                  onPress={() => setReceiptOrder(order)}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Icon name="receipt_long" size={14} color="#3D2619" />
+                    <Text style={styles.outlineButtonText}>ดูใบเสร็จ</Text>
+                  </View>
+                </TouchableOpacity>
 
-            {order.items.map((item, index) => (
-              <View key={index} style={styles.itemBlock}>
-                <View style={styles.itemRow}>
-                  <Text style={styles.itemName} numberOfLines={1}>
-                    {item.product_name} × {item.quantity}
-                  </Text>
-
-                  <Text style={styles.itemPrice}>
-                    ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
-                  </Text>
-                </View>
-
-                {status.tone === "delivered" && onClaimItem && (
-                  <TouchableOpacity
-                    style={styles.claimButton}
-                    activeOpacity={0.7}
-                    onPress={() => onClaimItem(order, item)}
-                  >
-                    <Text style={styles.claimButtonText}>เคลมสินค้า</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={[styles.filledButton, reorderingId === order.id && styles.filledButtonDisabled]}
+                  activeOpacity={0.8}
+                  disabled={reorderingId === order.id}
+                  onPress={() => handleReorder(order)}
+                >
+                  {reorderingId === order.id ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Icon name="refresh" size={14} color="#FFFFFF" weight={700} />
+                      <Text style={styles.filledButtonText}>สั่งซื้ออีกครั้ง</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
-            ))}
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>ยอดรวม</Text>
-              <Text style={styles.totalValue}>
-                ฿{Number(order.total_amount).toLocaleString("th-TH")}
-              </Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.receiptButton}
-              activeOpacity={0.7}
-              onPress={() => setReceiptOrder(order)}
-            >
-              <Text style={styles.receiptButtonText}>🧾 ดูใบเสร็จ</Text>
-            </TouchableOpacity>
-          </View>
-        );
+          );
         }}
         ListEmptyComponent={
           <View style={styles.center}>
@@ -196,6 +333,13 @@ export default function OrdersScreen({ onClaimItem }: OrdersScreenProps) {
           onClose={() => setReceiptOrder(null)}
         />
       )}
+
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        tone={toastTone}
+        onHide={() => setToastVisible(false)}
+      />
     </>
   );
 }
@@ -206,20 +350,54 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   list: {
     padding: 16,
     flexGrow: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
+  },
+
+  tabRow: {
+    marginBottom: 14,
+  },
+
+  tabRowContent: {
+    gap: 8,
+  },
+
+  tabChip: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E8DFD8",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tabChipActive: {
+    backgroundColor: "#3D2619",
+    borderColor: "#3D2619",
+  },
+
+  tabChipText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#4A3B32",
+  },
+
+  tabChipTextActive: {
+    color: "#FFFFFF",
   },
 
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -228,128 +406,179 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 10,
+    marginBottom: 2,
+  },
+
+  orderId: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#3D2619",
   },
 
   statusBadge: {
-    fontSize: 11,
-    fontWeight: "700",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 20,
-    overflow: "hidden",
+  },
+
+  statusBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "700",
   },
 
   statusPending: {
     backgroundColor: "#FFF3E0",
-    color: "#B26A00",
+  },
+  statusPendingText: {
+    color: "#D97706",
   },
 
   statusShipping: {
     backgroundColor: "#E8F0FE",
+  },
+  statusShippingText: {
     color: "#1A56C4",
   },
 
   statusDelivered: {
     backgroundColor: "#E7F6EC",
-    color: "#1E8E3E",
+  },
+  statusDeliveredText: {
+    color: "#2D6A4F",
   },
 
   statusCancelled: {
     backgroundColor: "#FBEAE9",
-    color: "#B3413E",
   },
-
-  orderId: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111111",
+  statusCancelledText: {
+    color: "#C53030",
   },
 
   orderDate: {
-    fontSize: 12,
-    color: "#8A8A8A",
+    fontSize: 11.5,
+    color: "#8A7D75",
+    marginBottom: 10,
   },
 
-  itemBlock: {
-    marginBottom: 6,
-  },
-
-  itemRow: {
+  itemPreviewRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    alignItems: "center",
+    marginBottom: 8,
   },
 
-  claimButton: {
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: "#111111",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 2,
-    marginBottom: 4,
+  thumbRow: {
+    flexDirection: "row",
+    marginRight: 10,
   },
 
-  claimButtonText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#111111",
+  thumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+
+  thumbPlaceholder: {
+    backgroundColor: "#F0EDE9",
+  },
+
+  thumbOverlap: {
+    marginLeft: -14,
   },
 
   itemName: {
     fontSize: 13,
-    color: "#4A4A4A",
-    flex: 1,
-    paddingRight: 8,
+    fontWeight: "600",
+    color: "#3D2619",
+    marginBottom: 2,
   },
 
-  itemPrice: {
-    fontSize: 13,
-    color: "#4A4A4A",
+  itemMeta: {
+    fontSize: 11.5,
+    color: "#8A7D75",
+  },
+
+  claimLink: {
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+
+  claimLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#3D2619",
+    textDecorationLine: "underline",
   },
 
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 4,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#EDEDED",
+    borderTopColor: "#E8DFD8",
   },
 
   totalLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   totalValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111111",
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#3D2619",
   },
 
-  receiptButton: {
-    alignSelf: "flex-start",
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 12,
   },
 
-  receiptButtonText: {
+  outlineButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: "#D4C3BA",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+
+  outlineButtonText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#4A4A4A",
+    color: "#4A3B32",
+  },
+
+  filledButton: {
+    flex: 1,
+    backgroundColor: "#3D2619",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+
+  filledButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  filledButtonText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   error: {
     fontSize: 14,
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
   },
 
   emptyText: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 });

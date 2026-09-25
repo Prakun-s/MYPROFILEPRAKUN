@@ -9,6 +9,30 @@ async function authHeaders() {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
+// อัปโหลดรูปโปรไฟล์จริงจากเครื่องผู้ใช้ (ไม่ใช่แค่วาง URL) — ส่งเป็น multipart/form-data
+// ต้องไม่ตั้ง Content-Type เอง ปล่อยให้ browser ใส่ boundary ให้อัตโนมัติ
+export async function uploadAvatar(file: Blob, filename?: string) {
+  const token = await getToken();
+
+  const formData = new FormData();
+  formData.append("avatar", file, filename || "avatar.jpg");
+
+  const response = await fetch(`${API_URL}/api/upload/avatar`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "อัปโหลดรูปไม่สำเร็จ");
+  }
+
+  return result as { success: boolean; url: string };
+}
 
 export async function fetchProducts() {
   const response = await fetch(`${API_URL}/api/products`, {

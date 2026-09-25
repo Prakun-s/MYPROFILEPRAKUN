@@ -98,13 +98,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#2B2B31",
+    color: "#2B2118",
     marginBottom: 8,
   },
 
   message: {
     fontSize: 14,
-    color: "#6B6B74",
+    color: "#50453E",
     lineHeight: 20,
     marginBottom: 20,
   },
@@ -125,14 +125,14 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4B4B54",
+    color: "#4A3B32",
   },
 
   confirmButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
   },
 
   confirmButtonDestructive: {

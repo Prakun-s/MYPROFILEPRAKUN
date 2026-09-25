@@ -14,6 +14,7 @@ import {
 
 import { fetchCart, removeFromCart, updateCartItem } from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
+import Icon from "./components/Icon";
 import Receipt, { ReceiptItem } from "./components/Receipt";
 import { useCart } from "./context/CartContext";
 import { useCoins } from "./context/CoinContext";
@@ -189,7 +190,7 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#111111" />
+        <ActivityIndicator size="large" color="#3D2619" />
       </View>
     );
   }
@@ -201,7 +202,7 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
         contentContainerStyle={styles.successContent}
       >
         <View style={styles.successHeader}>
-          <Text style={styles.successIcon}>✓</Text>
+          <Icon name="check_circle" size={44} color="#2D6A4F" style={{ marginBottom: 12 }} />
           <Text style={styles.successTitle}>สั่งซื้อสำเร็จ</Text>
         </View>
 
@@ -263,49 +264,61 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
           />
 
           <View style={styles.rowInfo}>
-            <Text style={[styles.name, isWide && styles.nameWide]} numberOfLines={2}>
-              {item.name}
-            </Text>
+            <View style={styles.rowTopLine}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.category} numberOfLines={1}>
+                  {item.category}
+                </Text>
 
-            <Text style={[styles.price, isWide && styles.priceWide]}>
-              ฿{Number(item.price).toLocaleString("th-TH")}
-            </Text>
-
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                style={[styles.stepButton, isWide && styles.stepButtonWide]}
-                activeOpacity={0.7}
-                disabled={updatingId === item.product_id}
-                onPress={() => changeQuantity(item, item.quantity - 1)}
-              >
-                <Text style={styles.stepButtonText}>−</Text>
-              </TouchableOpacity>
-
-              <Text style={[styles.stepValue, isWide && styles.stepValueWide]}>
-                {item.quantity}
-              </Text>
+                <Text style={[styles.name, isWide && styles.nameWide]} numberOfLines={2}>
+                  {item.name}
+                </Text>
+              </View>
 
               <TouchableOpacity
-                style={[styles.stepButton, isWide && styles.stepButtonWide]}
-                activeOpacity={0.7}
-                disabled={
-                  updatingId === item.product_id ||
-                  item.quantity >= item.stock
-                }
-                onPress={() => changeQuantity(item, item.quantity + 1)}
-              >
-                <Text style={styles.stepButtonText}>+</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.removeLink}
+                style={styles.trashButton}
                 activeOpacity={0.7}
                 onPress={() => setRemoveTarget(item)}
               >
-                <Text style={[styles.removeLinkText, isWide && styles.removeLinkTextWide]}>
-                  ลบ
-                </Text>
+                <Icon name="delete" size={16} color="#C53030" />
               </TouchableOpacity>
+            </View>
+
+            <Text style={styles.unitPrice}>
+              ฿{Number(item.price).toLocaleString("th-TH")} / ชิ้น
+            </Text>
+
+            <View style={styles.rowBottomLine}>
+              <View style={styles.stepper}>
+                <TouchableOpacity
+                  style={[styles.stepButton, isWide && styles.stepButtonWide]}
+                  activeOpacity={0.7}
+                  disabled={updatingId === item.product_id}
+                  onPress={() => changeQuantity(item, item.quantity - 1)}
+                >
+                  <Text style={styles.stepButtonText}>−</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.stepValue, isWide && styles.stepValueWide]}>
+                  {item.quantity}
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.stepButton, isWide && styles.stepButtonWide]}
+                  activeOpacity={0.7}
+                  disabled={
+                    updatingId === item.product_id ||
+                    item.quantity >= item.stock
+                  }
+                  onPress={() => changeQuantity(item, item.quantity + 1)}
+                >
+                  <Text style={styles.stepButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.price, isWide && styles.priceWide]}>
+                ฿{(Number(item.price) * item.quantity).toLocaleString("th-TH")}
+              </Text>
             </View>
 
             {item.quantity >= item.stock && (
@@ -448,7 +461,7 @@ export default CartScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   center: {
@@ -456,7 +469,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   list: {
@@ -467,7 +480,7 @@ const styles = StyleSheet.create({
   wideContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   wideListFlex: {
@@ -486,7 +499,7 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     backgroundColor: "#FFFFFF",
     borderLeftWidth: 1,
-    borderLeftColor: "#EDEDED",
+    borderLeftColor: "#E8DFD8",
     padding: 32,
     justifyContent: "space-between",
   },
@@ -494,7 +507,7 @@ const styles = StyleSheet.create({
   summarySidebarTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 24,
   },
 
@@ -506,17 +519,17 @@ const styles = StyleSheet.create({
 
   priceLabel: {
     fontSize: 16,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   priceValue: {
     fontSize: 16,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#EDEDED",
+    backgroundColor: "#E8DFD8",
     marginVertical: 16,
   },
 
@@ -525,7 +538,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 12,
     marginBottom: 10,
   },
@@ -540,7 +553,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 10,
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#F0EDE9",
   },
 
   imageWide: {
@@ -554,10 +567,45 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
+  rowTopLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  category: {
+    fontSize: 10.5,
+    color: "#8A7D75",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+
+  trashButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+
+  trashIcon: {
+    fontSize: 15,
+  },
+
+  unitPrice: {
+    fontSize: 11.5,
+    color: "#8A7D75",
+    marginTop: 2,
+    marginBottom: 8,
+  },
+
+  rowBottomLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
   name: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 4,
   },
 
@@ -567,15 +615,13 @@ const styles = StyleSheet.create({
   },
 
   price: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
-    marginBottom: 8,
+    color: "#3D2619",
   },
 
   priceWide: {
-    fontSize: 17,
-    marginBottom: 14,
+    fontSize: 18,
   },
 
   stepper: {
@@ -589,7 +635,7 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#D8D8D8",
+    borderColor: "#D4C3BA",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -603,13 +649,13 @@ const styles = StyleSheet.create({
   stepButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   stepValue: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
     minWidth: 18,
     textAlign: "center",
   },
@@ -619,23 +665,9 @@ const styles = StyleSheet.create({
     minWidth: 24,
   },
 
-  removeLink: {
-    marginLeft: "auto",
-  },
-
-  removeLinkText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#B3413E",
-  },
-
-  removeLinkTextWide: {
-    fontSize: 14,
-  },
-
   stockWarning: {
     fontSize: 11,
-    color: "#B3413E",
+    color: "#C53030",
     marginTop: 6,
   },
 
@@ -647,13 +679,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 6,
   },
 
   emptyText: {
     fontSize: 13,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     textAlign: "center",
     marginBottom: 20,
     paddingHorizontal: 30,
@@ -666,7 +698,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
-    borderTopColor: "#EDEDED",
+    borderTopColor: "#E8DFD8",
     padding: 16,
   },
 
@@ -679,17 +711,17 @@ const styles = StyleSheet.create({
 
   summaryLabel: {
     fontSize: 17,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   summaryTotal: {
     fontSize: 26,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   checkoutButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
@@ -703,13 +735,13 @@ const styles = StyleSheet.create({
 
   successIcon: {
     fontSize: 40,
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 12,
   },
 
   successScroll: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   successContent: {
@@ -725,20 +757,20 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 6,
   },
 
   successText: {
     fontSize: 13,
-    color: "#6B6B6B",
+    color: "#50453E",
     marginBottom: 4,
   },
 
   successTotal: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 24,
   },
 
@@ -760,7 +792,7 @@ const styles = StyleSheet.create({
   },
 
   primaryButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -778,7 +810,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
     textDecorationLine: "underline",
     textAlign: "center",
   },

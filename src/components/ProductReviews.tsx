@@ -16,6 +16,7 @@ import {
   submitProductReview,
 } from "../api";
 import ConfirmDialog from "./ConfirmDialog";
+import Icon from "./Icon";
 
 interface Props {
   productId: number;
@@ -35,16 +36,14 @@ function Stars({
       {[1, 2, 3, 4, 5].map((n) => {
         const filled = n <= Math.round(value);
         const star = (
-          <Text
+          <Icon
             key={n}
-            style={{
-              fontSize: size,
-              color: filled ? "#F2A93B" : "#D8D8D8",
-              marginRight: 2,
-            }}
-          >
-            ★
-          </Text>
+            name="star"
+            filled={filled}
+            size={size}
+            color={filled ? "#F2A93B" : "#D4C3BA"}
+            style={{ marginRight: 2 }}
+          />
         );
 
         if (!onChange) return star;
@@ -137,7 +136,7 @@ export default function ProductReviews({ productId }: Props) {
   if (loading) {
     return (
       <View style={styles.wrapper}>
-        <ActivityIndicator size="small" color="#111111" />
+        <ActivityIndicator size="small" color="#3D2619" />
       </View>
     );
   }
@@ -259,13 +258,13 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: "#EDEDED",
+    borderTopColor: "#E8DFD8",
   },
 
   title: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 16,
   },
 
@@ -279,20 +278,20 @@ const styles = StyleSheet.create({
   averageValue: {
     fontSize: 36,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   reviewCountText: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginTop: 4,
   },
 
   formCard: {
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 16,
     marginBottom: 20,
   },
@@ -300,19 +299,19 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 10,
   },
 
   commentInput: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13.5,
-    color: "#2B2B31",
+    color: "#2B2118",
     minHeight: 70,
     marginTop: 12,
   },
@@ -325,7 +324,7 @@ const styles = StyleSheet.create({
   },
 
   submitButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingHorizontal: 18,
     paddingVertical: 11,
     borderRadius: 10,
@@ -348,12 +347,12 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#B3413E",
+    color: "#C53030",
   },
 
   reviewCard: {
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
+    borderTopColor: "#F0EDE9",
     paddingVertical: 14,
   },
 
@@ -366,30 +365,30 @@ const styles = StyleSheet.create({
   reviewUsername: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   reviewDate: {
     fontSize: 11.5,
-    color: "#B0B0B0",
+    color: "#8A7D75",
   },
 
   reviewComment: {
     fontSize: 13,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     lineHeight: 19,
     marginTop: 8,
   },
 
   errorText: {
     fontSize: 12.5,
-    color: "#B3413E",
+    color: "#C53030",
     marginTop: 8,
   },
 
   emptyText: {
     fontSize: 13,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     paddingVertical: 12,
   },
 });

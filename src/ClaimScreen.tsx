@@ -19,6 +19,7 @@ import {
   fetchMyOrders,
   submitClaim,
 } from "./api";
+import Icon from "./components/Icon";
 
 interface ClaimOrderItem {
   product_id: number;
@@ -62,23 +63,23 @@ function isDelivered(order: ClaimOrder) {
   return hoursSince >= 24;
 }
 
-const CLAIM_REASONS: { value: ClaimReason; label: string }[] = [
-  { value: "damaged", label: "สินค้าชำรุด / เสียหาย" },
-  { value: "wrong_item", label: "ได้รับสินค้าผิดรายการ" },
-  { value: "missing_item", label: "สินค้าไม่ครบ / ขาดอุปกรณ์" },
-  { value: "not_as_described", label: "สินค้าไม่ตรงตามที่สั่ง" },
-  { value: "fake", label: "สงสัยว่าเป็นสินค้าปลอม" },
-  { value: "other", label: "อื่นๆ" },
+const CLAIM_REASONS: { value: ClaimReason; label: string; icon: string }[] = [
+  { value: "damaged", label: "สินค้าชำรุด/เสียหาย", icon: "inventory_2" },
+  { value: "wrong_item", label: "ส่งผิดรายการ", icon: "swap_horiz" },
+  { value: "missing_item", label: "สินค้าไม่ครบ", icon: "unarchive" },
+  { value: "not_as_described", label: "ไม่ตรงตามที่สั่ง", icon: "search" },
+  { value: "fake", label: "สงสัยสินค้าปลอม", icon: "warning" },
+  { value: "other", label: "อื่นๆ", icon: "edit" },
 ];
 
 const STATUS_META: Record<
   ClaimStatus,
   { label: string; bg: string; color: string }
 > = {
-  pending: { label: "รอตรวจสอบ", bg: "#FBEFDD", color: "#B26A00" },
+  pending: { label: "รอตรวจสอบ", bg: "#FBEFDD", color: "#D97706" },
   approved: { label: "อนุมัติแล้ว", bg: "#E4ECFB", color: "#1A56C4" },
-  rejected: { label: "ถูกปฏิเสธ", bg: "#FBE7E6", color: "#B3413E" },
-  completed: { label: "ดำเนินการเสร็จสิ้น", bg: "#E3F3E7", color: "#1E8E3E" },
+  rejected: { label: "ถูกปฏิเสธ", bg: "#FBE7E6", color: "#C53030" },
+  completed: { label: "ดำเนินการเสร็จสิ้น", bg: "#E3F3E7", color: "#2D6A4F" },
 };
 
 type ClaimSelection = { order: ClaimOrder; item: ClaimOrderItem } | null;
@@ -224,7 +225,7 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
     if (loading) {
       return (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#111111" />
+          <ActivityIndicator size="large" color="#3D2619" />
         </View>
       );
     }
@@ -339,7 +340,7 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
 
                 <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
                   <Text style={[styles.statusBadgeText, { color: meta.color }]}>
-                    {meta.label}
+                    ● {meta.label}
                   </Text>
                 </View>
               </View>
@@ -374,7 +375,7 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
         ListEmptyComponent={
           claimsLoading ? (
             <View style={styles.center}>
-              <ActivityIndicator size="large" color="#111111" />
+              <ActivityIndicator size="large" color="#3D2619" />
             </View>
           ) : claimsError ? (
             <View style={styles.center}>
@@ -395,7 +396,7 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
     return (
       <View style={styles.center}>
         <View style={styles.successIconCircle}>
-          <Text style={styles.successIcon}>✓</Text>
+          <Icon name="check" size={30} color="#FFFFFF" weight={700} />
         </View>
 
         <Text style={styles.successTitle}>ส่งคำขอเคลมสำเร็จ</Text>
@@ -441,6 +442,25 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
       contentContainerStyle={styles.formContent}
       keyboardShouldPersistTaps="handled"
     >
+      <View style={styles.stepIndicatorRow}>
+        <View style={styles.stepDone}>
+          <Icon name="check" size={12} color="#FFFFFF" weight={700} />
+        </View>
+        <View style={styles.stepLineDone} />
+        <View style={styles.stepActive}>
+          <Text style={styles.stepActiveText}>2</Text>
+        </View>
+        <View style={styles.stepLine} />
+        <View style={styles.stepPending}>
+          <Text style={styles.stepPendingText}>3</Text>
+        </View>
+      </View>
+      <View style={styles.stepLabelRow}>
+        <Text style={styles.stepLabelDone}>เลือกสินค้า</Text>
+        <Text style={styles.stepLabelActive}>กรอกข้อมูล</Text>
+        <Text style={styles.stepLabelPending}>รอตรวจสอบ</Text>
+      </View>
+
       <View style={styles.claimCard}>
         <Text style={styles.title}>เคลมสินค้า</Text>
 
@@ -464,6 +484,7 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
             activeOpacity={0.7}
             onPress={() => setReason(r.value)}
           >
+            <Icon name={r.icon} size={16} color={reason === r.value ? "#FFFFFF" : "#3D2619"} />
             <Text
               style={[
                 styles.reasonChipText,
@@ -477,15 +498,19 @@ const ClaimScreen = forwardRef<ClaimScreenHandle, ClaimScreenProps>(function Cla
       </View>
 
       {/* รายละเอียดปัญหา */}
-      <Text style={styles.sectionLabel}>รายละเอียดปัญหา *</Text>
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>รายละเอียดปัญหา *</Text>
+        <Text style={styles.charCounter}>{description.length}/300</Text>
+      </View>
 
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="อธิบายปัญหาที่พบ เช่น สินค้าแตกร้าวบริเวณไหน สังเกตเห็นตอนไหน..."
         value={description}
-        onChangeText={setDescription}
+        onChangeText={(text) => setDescription(text.slice(0, 300))}
         multiline
         numberOfLines={5}
+        maxLength={300}
         textAlignVertical="top"
       />
 
@@ -546,7 +571,7 @@ export default ClaimScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   formContent: {
@@ -559,13 +584,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   list: {
     padding: 16,
     flexGrow: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   tabRow: {
@@ -590,17 +615,17 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   tabTextActive: {
-    color: "#111111",
+    color: "#3D2619",
   },
 
   pickTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 12,
   },
 
@@ -608,7 +633,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -616,7 +641,7 @@ const styles = StyleSheet.create({
   orderId: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 6,
   },
 
@@ -626,26 +651,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "#F1F1F1",
+    borderTopColor: "#F0EDE9",
   },
 
   itemName: {
     fontSize: 13,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     flex: 1,
     paddingRight: 8,
   },
 
   itemArrow: {
     fontSize: 18,
-    color: "#B0B0B0",
+    color: "#8A7D75",
   },
 
   claimCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 16,
     marginBottom: 8,
   },
@@ -653,69 +678,178 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 12,
   },
 
   label: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginBottom: 4,
   },
 
   productName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   sectionLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginTop: 18,
     marginBottom: 8,
+  },
+
+  sectionLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  charCounter: {
+    fontSize: 11,
+    color: "#8A7D75",
+  },
+
+  stepIndicatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    marginTop: 4,
+  },
+
+  stepDone: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#3D2619",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stepDoneText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  stepActive: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: "#3D2619",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stepActiveText: {
+    color: "#3D2619",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  stepPending: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#E8DFD8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stepPendingText: {
+    color: "#8A7D75",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  stepLineDone: {
+    flex: 1,
+    height: 2,
+    backgroundColor: "#3D2619",
+  },
+
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: "#E8DFD8",
+  },
+
+  stepLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+
+  stepLabelDone: {
+    fontSize: 10.5,
+    color: "#3D2619",
+    fontWeight: "600",
+  },
+
+  stepLabelActive: {
+    fontSize: 10.5,
+    color: "#3D2619",
+    fontWeight: "700",
+  },
+
+  stepLabelPending: {
+    fontSize: 10.5,
+    color: "#8A7D75",
   },
 
   reasonGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
 
   reasonChip: {
+    width: "47%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E5E3DC",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E8DFD8",
     backgroundColor: "#FFFFFF",
   },
 
+  reasonChipIcon: {
+    fontSize: 16,
+  },
+
   reasonChipSelected: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
+    backgroundColor: "#F7F1EC",
+    borderColor: "#3D2619",
   },
 
   reasonChipText: {
     fontSize: 12.5,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     fontWeight: "600",
+    flexShrink: 1,
   },
 
   reasonChipTextSelected: {
-    color: "#FFFFFF",
+    color: "#3D2619",
   },
 
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: "#2B2B31",
+    color: "#2B2118",
   },
 
   textArea: {
@@ -725,12 +859,12 @@ const styles = StyleSheet.create({
 
   formError: {
     fontSize: 13,
-    color: "#B3413E",
+    color: "#C53030",
     marginTop: 14,
   },
 
   primaryButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -754,20 +888,20 @@ const styles = StyleSheet.create({
   },
 
   secondaryButtonText: {
-    color: "#4A4A4A",
+    color: "#4A3B32",
     fontSize: 13,
     fontWeight: "600",
   },
 
   error: {
     fontSize: 14,
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
   },
 
   emptyText: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   // ===== ประวัติการเคลม =====
@@ -775,7 +909,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -800,20 +934,20 @@ const styles = StyleSheet.create({
 
   claimReasonText: {
     fontSize: 12.5,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     marginTop: 6,
     fontWeight: "600",
   },
 
   claimDescText: {
     fontSize: 12.5,
-    color: "#6B6B74",
+    color: "#50453E",
     marginTop: 4,
     lineHeight: 18,
   },
 
   adminNoteBox: {
-    backgroundColor: "#F7F6F3",
+    backgroundColor: "#F6F3EE",
     borderRadius: 8,
     padding: 10,
     marginTop: 10,
@@ -822,18 +956,18 @@ const styles = StyleSheet.create({
   adminNoteLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginBottom: 2,
   },
 
   adminNoteText: {
     fontSize: 12.5,
-    color: "#2B2B31",
+    color: "#2B2118",
   },
 
   claimDate: {
     fontSize: 11,
-    color: "#B0B0B0",
+    color: "#8A7D75",
     marginTop: 10,
   },
 
@@ -850,20 +984,20 @@ const styles = StyleSheet.create({
 
   successIcon: {
     fontSize: 30,
-    color: "#1E8E3E",
+    color: "#2D6A4F",
     fontWeight: "700",
   },
 
   successTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 8,
   },
 
   successSubtitle: {
     fontSize: 13,
-    color: "#6B6B74",
+    color: "#50453E",
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,

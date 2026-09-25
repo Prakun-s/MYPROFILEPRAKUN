@@ -12,6 +12,7 @@ import {
 import {
   CoinReward,
   DiscountCode,
+  DiscountType,
   collectDiscountCode,
   fetchCoinRewards,
   fetchMyDiscountCodes,
@@ -19,14 +20,27 @@ import {
   redeemCoinReward,
 } from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
+import Icon from "./components/Icon";
 import Toast from "./components/Toast";
 import { useCoins } from "./context/CoinContext";
 import { SEASON_PRESETS } from "./lib/seasonPresets";
 
 type Tab = "shop" | "publicCodes" | "myCodes";
 
+interface CoinShopScreenProps {
+  onOpenHistory?: () => void;
+}
+
+// ป้ายหมวดของรางวัลตามประเภทส่วนลด (ไม่มีข้อมูลสินค้าจริง ใช้จัดกลุ่มด้วยประเภทส่วนลดแทน)
+function getRewardMeta(discountType: DiscountType) {
+  if (discountType === "percent") {
+    return { icon: "sell", bg: "#FFF6E0", eyebrow: "ส่วนลดเปอร์เซ็นต์" };
+  }
+  return { icon: "payments", bg: "#E3F3E7", eyebrow: "ส่วนลดเงินสด" };
+}
+
 // ร้านค้าเหรียญ: ใช้เหรียญสะสมแลกเป็นโค้ดส่วนลดส่วนตัว + เก็บโค้ดส่วนลดตามฤดูกาลจากแอดมิน
-export default function CoinShopScreen() {
+export default function CoinShopScreen({ onOpenHistory }: CoinShopScreenProps) {
   const { coinBalance, refreshCoins } = useCoins();
 
   const [tab, setTab] = useState<Tab>("shop");
@@ -154,8 +168,23 @@ export default function CoinShopScreen() {
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.balanceBar}>
-        <Text style={styles.balanceLabel}>เหรียญสะสมของคุณ</Text>
-        <Text style={styles.balanceValue}>🪙 {coinBalance.toLocaleString("th-TH")}</Text>
+        <View>
+          <Text style={styles.balanceLabel}>เหรียญสะสมของคุณ</Text>
+          <View style={styles.buttonInlineRow}>
+            <Icon name="monetization_on" size={18} color="#FFFFFF" />
+            <Text style={styles.balanceValue}>{coinBalance.toLocaleString("th-TH")}</Text>
+          </View>
+        </View>
+
+        {onOpenHistory && (
+          <TouchableOpacity
+            style={styles.historyButton}
+            activeOpacity={0.7}
+            onPress={onOpenHistory}
+          >
+            <Text style={styles.historyButtonText}>⟲ ประวัติเหรียญ</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.tabRow}>
@@ -165,7 +194,7 @@ export default function CoinShopScreen() {
           onPress={() => setTab("shop")}
         >
           <Text style={[styles.tabText, tab === "shop" && styles.tabTextActive]}>
-            ร้านค้าเหรียญ
+            ร้านแลกของรางวัล
           </Text>
         </TouchableOpacity>
 
@@ -175,7 +204,7 @@ export default function CoinShopScreen() {
           onPress={() => setTab("publicCodes")}
         >
           <Text style={[styles.tabText, tab === "publicCodes" && styles.tabTextActive]}>
-            โค้ดส่วนลด
+            โค้ดทั่วไป
           </Text>
         </TouchableOpacity>
 
@@ -202,10 +231,10 @@ export default function CoinShopScreen() {
             return (
               <View style={styles.publicCodeCard}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.publicCodeText}>
-                    {preset ? `${preset.icon} ` : "🏷️ "}
-                    {item.code}
-                  </Text>
+                  <View style={styles.buttonInlineRow}>
+                    <Icon name={preset?.icon || "sell"} size={13} color="#7F562B" />
+                    <Text style={styles.publicCodeText}>{item.code}</Text>
+                  </View>
                   <Text style={styles.rewardName}>{item.label}</Text>
                   <Text style={styles.rewardValue}>
                     {item.discount_type === "percent"
@@ -229,10 +258,13 @@ export default function CoinShopScreen() {
                 >
                   {collectingId === item.id ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : collected ? (
+                    <View style={styles.buttonInlineRow}>
+                      <Icon name="check" size={13} color="#FFFFFF" />
+                      <Text style={styles.redeemButtonText}>เก็บแล้ว</Text>
+                    </View>
                   ) : (
-                    <Text style={styles.redeemButtonText}>
-                      {collected ? "เก็บแล้ว ✓" : "เก็บโค้ด"}
-                    </Text>
+                    <Text style={styles.redeemButtonText}>เก็บโค้ด</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -241,7 +273,7 @@ export default function CoinShopScreen() {
           ListEmptyComponent={
             publicCodesLoading ? (
               <View style={styles.center}>
-                <ActivityIndicator size="large" color="#111111" />
+                <ActivityIndicator size="large" color="#3D2619" />
               </View>
             ) : publicCodesError ? (
               <View style={styles.center}>
@@ -262,48 +294,86 @@ export default function CoinShopScreen() {
           renderItem={({ item }) => {
             const affordable = coinBalance >= item.coin_cost;
             const outOfStock = item.stock !== null && item.redeemed_count >= (item.stock ?? 0);
+            const meta = getRewardMeta(item.discount_type);
+            const shortBy = item.coin_cost - coinBalance;
 
             return (
               <View style={styles.rewardCard}>
-                <View style={styles.rewardIconCircle}>
-                  <Text style={styles.rewardIcon}>🎟️</Text>
+                <View style={styles.rewardTopRow}>
+                  <View style={[styles.rewardIconBox, { backgroundColor: meta.bg }]}>
+                    <Icon name={meta.icon} size={18} color="#7F562B" />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rewardEyebrow}>{meta.eyebrow}</Text>
+                    <Text style={styles.rewardName}>{item.name}</Text>
+                    {item.description ? (
+                      <Text style={styles.rewardDesc} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rewardName}>{item.name}</Text>
-                  {item.description ? (
-                    <Text style={styles.rewardDesc}>{item.description}</Text>
-                  ) : null}
-                  <Text style={styles.rewardValue}>
-                    {item.discount_type === "percent"
-                      ? `ลด ${item.discount_value}%`
-                      : `ลด ฿${Number(item.discount_value).toLocaleString("th-TH")}`}
-                    {item.min_order_amount > 0
-                      ? ` · ซื้อขั้นต่ำ ฿${Number(item.min_order_amount).toLocaleString("th-TH")}`
-                      : ""}
-                  </Text>
+                <Text style={styles.rewardValue}>
+                  {item.discount_type === "percent"
+                    ? `ลด ${item.discount_value}%`
+                    : `ลด ฿${Number(item.discount_value).toLocaleString("th-TH")}`}
+                  {item.min_order_amount > 0
+                    ? ` · ซื้อขั้นต่ำ ฿${Number(item.min_order_amount).toLocaleString("th-TH")}`
+                    : ""}
+                </Text>
+
+                <View style={styles.rewardBottomRow}>
+                  <View style={styles.rewardCostRow}>
+                    <Icon name="monetization_on" size={15} color="#D97706" />
+                    <Text style={styles.rewardCostValue}>{item.coin_cost} เหรียญ</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.redeemButton,
+                      (!affordable || outOfStock) && styles.redeemButtonDisabled,
+                    ]}
+                    activeOpacity={0.7}
+                    disabled={!affordable || outOfStock || redeeming}
+                    onPress={() => setRedeemTarget(item)}
+                  >
+                    <Text
+                      style={[
+                        styles.redeemButtonText,
+                        (!affordable || outOfStock) && styles.redeemButtonTextDisabled,
+                      ]}
+                    >
+                      {outOfStock ? "หมดแล้ว" : "แลกเลย"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.redeemButton,
-                    (!affordable || outOfStock) && styles.redeemButtonDisabled,
-                  ]}
-                  activeOpacity={0.7}
-                  disabled={!affordable || outOfStock || redeeming}
-                  onPress={() => setRedeemTarget(item)}
-                >
-                  <Text style={styles.redeemButtonText}>
-                    {outOfStock ? "หมดแล้ว" : `🪙 ${item.coin_cost}`}
-                  </Text>
-                </TouchableOpacity>
+                {!outOfStock && (
+                  <View style={styles.buttonInlineRow}>
+                    <Icon
+                      name={affordable ? "check_circle" : "error"}
+                      size={13}
+                      color={affordable ? "#2D6A4F" : "#D97706"}
+                    />
+                    <Text
+                      style={[
+                        styles.rewardStatus,
+                        affordable ? styles.rewardStatusOk : styles.rewardStatusShort,
+                      ]}
+                    >
+                      {affordable ? "เหรียญเพียงพอสำหรับแลก" : `ขาดอีก ${shortBy} เหรียญ`}
+                    </Text>
+                  </View>
+                )}
               </View>
             );
           }}
           ListEmptyComponent={
             rewardsLoading ? (
               <View style={styles.center}>
-                <ActivityIndicator size="large" color="#111111" />
+                <ActivityIndicator size="large" color="#3D2619" />
               </View>
             ) : rewardsError ? (
               <View style={styles.center}>
@@ -364,7 +434,7 @@ export default function CoinShopScreen() {
           ListEmptyComponent={
             myCodesLoading ? (
               <View style={styles.center}>
-                <ActivityIndicator size="large" color="#111111" />
+                <ActivityIndicator size="large" color="#3D2619" />
               </View>
             ) : myCodesError ? (
               <View style={styles.center}>
@@ -410,8 +480,14 @@ const styles = StyleSheet.create({
     padding: 40,
   },
 
+  buttonInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
   balanceBar: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingHorizontal: 20,
     paddingVertical: 16,
     flexDirection: "row",
@@ -421,14 +497,28 @@ const styles = StyleSheet.create({
 
   balanceLabel: {
     fontSize: 13,
-    color: "#C9C9C9",
+    color: "#D4C3BA",
     fontWeight: "600",
+    marginBottom: 4,
   },
 
   balanceValue: {
     fontSize: 18,
     color: "#FFFFFF",
     fontWeight: "800",
+  },
+
+  historyButton: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+
+  historyButtonText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   tabRow: {
@@ -454,73 +544,106 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   tabTextActive: {
-    color: "#111111",
+    color: "#3D2619",
   },
 
   list: {
     padding: 16,
     flexGrow: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   rewardCard: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
-  rewardIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFF6E0",
+  rewardTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 10,
+  },
+
+  rewardIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
 
   rewardIcon: {
-    fontSize: 20,
+    fontSize: 22,
+  },
+
+  rewardEyebrow: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#8A7D75",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+    textTransform: "uppercase",
   },
 
   rewardName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111111",
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#3D2619",
   },
 
   rewardDesc: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginTop: 2,
   },
 
   rewardValue: {
     fontSize: 12.5,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     fontWeight: "600",
-    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  rewardBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  rewardCostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  rewardCostIcon: {
+    fontSize: 15,
+  },
+
+  rewardCostValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#3D2619",
   },
 
   redeemButton: {
-    backgroundColor: "#111111",
-    paddingHorizontal: 14,
+    backgroundColor: "#3D2619",
+    paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 10,
-    marginLeft: 10,
   },
 
   redeemButtonDisabled: {
-    backgroundColor: "#D8D8D8",
+    backgroundColor: "#F0EDE9",
   },
 
   redeemButtonText: {
@@ -529,11 +652,29 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  redeemButtonTextDisabled: {
+    color: "#8A7D75",
+  },
+
+  rewardStatus: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    marginTop: 8,
+  },
+
+  rewardStatusOk: {
+    color: "#2D6A4F",
+  },
+
+  rewardStatusShort: {
+    color: "#D97706",
+  },
+
   codeCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -544,7 +685,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 14,
     marginBottom: 12,
   },
@@ -552,7 +693,7 @@ const styles = StyleSheet.create({
   publicCodeText: {
     fontSize: 14.5,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
     letterSpacing: 0.3,
     marginBottom: 2,
   },
@@ -567,19 +708,19 @@ const styles = StyleSheet.create({
   codeText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
     letterSpacing: 0.5,
   },
 
   codeLabel: {
     fontSize: 12.5,
-    color: "#6B6B6B",
+    color: "#50453E",
     marginBottom: 4,
   },
 
   codeMeta: {
     fontSize: 12,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   statusBadge: {
@@ -593,7 +734,7 @@ const styles = StyleSheet.create({
   },
 
   statusBadgeInactive: {
-    backgroundColor: "#F1F1F1",
+    backgroundColor: "#F0EDE9",
   },
 
   statusBadgeText: {
@@ -602,21 +743,21 @@ const styles = StyleSheet.create({
   },
 
   statusBadgeTextActive: {
-    color: "#1E8E3E",
+    color: "#2D6A4F",
   },
 
   statusBadgeTextInactive: {
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 
   errorText: {
     fontSize: 14,
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
   },
 
   emptyText: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "#8A7D75",
   },
 });

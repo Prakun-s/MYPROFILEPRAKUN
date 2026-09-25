@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 
 import { Animated, Pressable, StyleSheet, Text } from "react-native";
 
+import Icon from "./Icon";
+
 interface Props {
   visible: boolean;
   message: string;
@@ -51,14 +53,14 @@ export default function Toast({
         { transform: [{ translateY }] },
       ]}
     >
-      <Text style={styles.icon}>{tone === "warning" ? "⚠️" : "ℹ️"}</Text>
+      <Icon name={tone === "warning" ? "warning" : "info"} size={18} color="#FFFFFF" />
 
       <Text style={styles.text} numberOfLines={2}>
         {message}
       </Text>
 
       <Pressable onPress={onHide} hitSlop={8}>
-        <Text style={styles.close}>✕</Text>
+        <Icon name="close" size={16} color="#FFFFFF" />
       </Pressable>
     </Animated.View>
   );
@@ -75,7 +77,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
   },
 
   toastWarning: {
-    backgroundColor: "#B3413E",
+    backgroundColor: "#C53030",
   },
 
   icon: {

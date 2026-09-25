@@ -1,6 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 require("dotenv").config();
 
 const authRouter = require("./src/routes/auth");
@@ -17,6 +20,64 @@ const PORT = process.env.PORT || 3090;
 // =========================
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+// =========================
+// อัปโหลดรูปโปรไฟล์ (avatar) — เก็บไฟล์จริงไว้ในเครื่อง server แล้ว serve ผ่าน /uploads
+// =========================
+const AVATAR_UPLOAD_DIR = path.join(__dirname, "uploads", "avatars");
+fs.mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, AVATAR_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+    const safeExt = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? ext : ".jpg";
+    cb(null, `avatar-${req.user.id}-${Date.now()}${safeExt}`);
+  },
+});
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("รองรับเฉพาะไฟล์รูปภาพเท่านั้น"));
+    }
+    cb(null, true);
+  },
+});
+
+app.post(
+  "/api/upload/avatar",
+  authenticateToken,
+  (req, res, next) => {
+    uploadAvatar.single("avatar")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || "อัปโหลดรูปไม่สำเร็จ",
+        });
+      }
+      next();
+    });
+  },
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบไฟล์รูปภาพที่อัปโหลด",
+      });
+    }
+
+    const url = `${req.protocol}://${req.get("host")}/uploads/avatars/${req.file.filename}`;
+
+    res.json({
+      success: true,
+      url,
+    });
+  }
+);
 
 // =========================
 // Auth routes (login / register / me)
@@ -1529,7 +1590,7 @@ app.get("/api/orders/my", authenticateToken, async (req, res) => {
 
     for (const order of orders) {
       const [items] = await pool.query(
-        "SELECT product_id, product_name, price, quantity FROM order_items WHERE order_id = ?",
+        "SELECT oi.product_id, oi.product_name, oi.price, oi.quantity, i.image_url FROM order_items oi LEFT JOIN Inventory i ON i.id = oi.product_id WHERE oi.order_id = ?",
         [order.id]
       );
 
@@ -1571,7 +1632,7 @@ app.get(
 
       for (const order of orders) {
         const [items] = await pool.query(
-          "SELECT product_id, product_name, price, quantity FROM order_items WHERE order_id = ?",
+          "SELECT oi.product_id, oi.product_name, oi.price, oi.quantity, i.image_url FROM order_items oi LEFT JOIN Inventory i ON i.id = oi.product_id WHERE oi.order_id = ?",
           [order.id]
         );
 

@@ -9,27 +9,36 @@ import {
 } from "react-native";
 
 import AddProductScreen from "../AddProductScreen";
+import { fetchAllClaims, fetchAllOrders, fetchProfile } from "../api";
 import AdminClaimsScreen from "../AdminClaimsScreen";
 import AdminCoinRewardsScreen from "../AdminCoinRewardsScreen";
 import AdminDiscountsScreen from "../AdminDiscountsScreen";
 import AdminOrdersScreen from "../AdminOrdersScreen";
+import AdminProductsScreen from "../AdminProductsScreen";
+import AdminNavTabs, { AdminTabKey } from "../components/AdminNavTabs";
+import BottomTabBar, { TabKey } from "../components/BottomTabBar";
 import CartScreen, { CartScreenHandle } from "../CartScreen";
 import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
 import CoinShopScreen from "../CoinShopScreen";
 import CoinsScreen from "../CoinsScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ShopLogo from "../components/ShopLogo";
-import UserMenu from "../components/UserMenu";
+import HeaderAvatarButton from "../components/HeaderAvatarButton";
+import NotificationBell from "../components/NotificationBell";
+import Icon from "../components/Icon";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useCoins } from "../context/CoinContext";
 import { useWishlist } from "../context/WishlistContext";
 import DashboardScreen from "../DashboardScreen";
+import MenuScreen from "../MenuScreen";
+import NotificationsScreen from "../NotificationsScreen";
 import EditProductScreen from "../EditProductScreen";
 import OrdersScreen from "../OrdersScreen";
 import ProductDetailScreen from "../ProductDetailScreen";
 import ProductListScreen from "../ProductListScreen";
 import ProfileScreen from "../ProfileScreen";
+import SettingsScreen from "../SettingsScreen";
 import WishlistScreen from "../WishlistScreen";
 
 interface Product {
@@ -66,6 +75,60 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   // จอแคบ (มือถือ) < 640 → ยุบส่วนหัวให้กระชับ เตรียมไว้สำหรับตอนแตกเป็นแอปมือถือ
   const isMobile = width < 640;
+
+  // รูปโปรไฟล์ผู้ใช้ (โชว์เป็นปุ่มวงกลมมุมขวาบน กดแล้วพาไปหน้าโปรไฟล์โดยตรง) — โหลดครั้งเดียวตอนล็อกอิน
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setAvatarUrl(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const profile = await fetchProfile();
+        setAvatarUrl(profile.avatar_url || null);
+      } catch (err) {
+        console.error("Load avatar error:", err);
+      }
+    })();
+  }, [user?.id]);
+
+  // นับออเดอร์/เคลมที่รอดำเนินการ ใช้โชว์ badge ตัวเลขบนแถบเมนูแอดมิน (AdminNavTabs)
+  const [adminPendingOrders, setAdminPendingOrders] = useState(0);
+  const [adminPendingClaims, setAdminPendingClaims] = useState(0);
+  // ใช้ส่งเลขออเดอร์ไปกรองล่วงหน้า ตอนกดลิงก์ "ดูคำสั่งซื้อ" จากหน้าเคลม
+  const [adminOrdersInitialSearch, setAdminOrdersInitialSearch] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    (async () => {
+      try {
+        const orders = await fetchAllOrders();
+        setAdminPendingOrders(
+          Array.isArray(orders)
+            ? orders.filter((o: any) => o.status === "pending").length
+            : 0
+        );
+      } catch (err) {
+        console.error("Load admin pending orders error:", err);
+      }
+
+      try {
+        const claims = await fetchAllClaims();
+        setAdminPendingClaims(
+          Array.isArray(claims)
+            ? claims.filter((c: any) => c.status === "pending").length
+            : 0
+        );
+      } catch (err) {
+        console.error("Load admin pending claims error:", err);
+      }
+    })();
+  }, [isAdmin]);
+
   const [screen, setScreen] = useState<
     | "products"
     | "add"
@@ -78,11 +141,15 @@ export default function HomeScreen() {
     | "adminOrders"
     | "adminClaims"
     | "adminDiscounts"
+    | "adminProducts"
     | "adminCoinRewards"
     | "claim"
     | "coins"
     | "coinShop"
     | "profile"
+    | "menu"
+    | "notifications"
+    | "settings"
   >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
@@ -91,11 +158,40 @@ export default function HomeScreen() {
     item: ClaimOrderItem;
   } | null>(null);
   // จำหน้าที่กดเข้ามาเคลมสินค้าไว้ เพื่อให้ปุ่ม "← กลับ" ย้อนไปหน้านั้นแทนที่จะไปหน้า Products เสมอ
-  const [claimOrigin, setClaimOrigin] = useState<"products" | "orders">(
+  const [claimOrigin, setClaimOrigin] = useState<"products" | "orders" | "menu">(
     "products"
   );
   const claimScreenRef = useRef<ClaimScreenHandle>(null);
   const cartScreenRef = useRef<CartScreenHandle>(null);
+
+  // ใช้โดยแถบเมนูล่าง (BottomTabBar): เคลียร์สถานะที่ค้างจากหน้าย่อย แล้วสลับไปแท็บหลักที่เลือก
+  const handleTabNavigate = (tab: TabKey) => {
+    setSelectedProduct(null);
+    setClaimTarget(null);
+    setScreen(tab);
+  };
+
+  // ใช้โดยแถบสลับหน้าแอดมิน (AdminNavTabs) ให้สลับไปหน้าแอดมินที่เลือกได้จากทุกหน้าแอดมิน
+  const handleAdminNavigate = (tab: AdminTabKey) => {
+    if (tab === "products") {
+      setScreen("adminProducts");
+      return;
+    }
+    if (tab === "dashboard") {
+      setScreen("dashboard");
+      return;
+    }
+    if (tab === "orders") {
+      setAdminOrdersInitialSearch("");
+      setScreen("adminOrders");
+      return;
+    }
+    if (tab === "claims") {
+      setScreen("adminClaims");
+      return;
+    }
+    setScreen("adminDiscounts");
+  };
 
   // Alert.alert ของ React Native ไม่ทำงานบนเว็บ (react-native-web มองว่าเป็น no-op)
   // จึงใช้ ConfirmDialog (สร้างจาก Modal ที่รองรับเว็บจริง) แทน
@@ -115,7 +211,7 @@ export default function HomeScreen() {
   // ผู้ใช้ role "user" ไม่มีสิทธิ์เข้าหน้าเพิ่ม/แก้ไขสินค้า
   // (กันไว้อีกชั้นแม้ปุ่มจะถูกซ่อนไปแล้ว)
   useEffect(() => {
-    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders" || screen === "adminClaims" || screen === "adminDiscounts" || screen === "adminCoinRewards") && !isAdmin) {
+    if ((screen === "add" || screen === "edit" || screen === "dashboard" || screen === "adminOrders" || screen === "adminClaims" || screen === "adminDiscounts" || screen === "adminProducts" || screen === "adminCoinRewards") && !isAdmin) {
       setScreen("products");
     }
   }, [screen, isAdmin]);
@@ -125,17 +221,23 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              console.log("BACK CLICKED");
-              setScreen("products");
-            }}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="เพิ่มสินค้า"
+              onPress={() => setScreen("products")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
+
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -143,6 +245,17 @@ export default function HomeScreen() {
             onSuccess={() => setScreen("products")}
           />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -153,18 +266,26 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              console.log("BACK CLICKED");
-              setScreen("products");
-              setSelectedProduct(null);
-            }}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="แก้ไขสินค้า"
+              onPress={() => {
+                setScreen("products");
+                setSelectedProduct(null);
+              }}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
+
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -177,6 +298,17 @@ export default function HomeScreen() {
           />
         </View>
 
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
       </View>
     );
   }
@@ -186,24 +318,29 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              const handledInternally = cartScreenRef.current?.goBack();
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ตะกร้าสินค้า"
+              onPress={() => {
+                const handledInternally = cartScreenRef.current?.goBack();
 
-              if (!handledInternally) {
-                setScreen("products");
-              }
-            }}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+                if (!handledInternally) {
+                  setScreen("products");
+                }
+              }}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>ตะกร้าสินค้า</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -214,6 +351,19 @@ export default function HomeScreen() {
           />
         </View>
 
+        <BottomTabBar active="cart" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
       </View>
     );
   }
@@ -223,18 +373,23 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ประวัติการสั่งซื้อ"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>ประวัติการสั่งซื้อ</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -247,6 +402,19 @@ export default function HomeScreen() {
           />
         </View>
 
+        <BottomTabBar active="orders" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
       </View>
     );
   }
@@ -256,63 +424,97 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="เหรียญสะสม"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>เหรียญสะสม</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
-          <CoinsScreen />
+          <CoinsScreen onOpenShop={() => setScreen("coinShop")} />
         </View>
+
+        <BottomTabBar active="coins" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
   }
 
   if (screen === "claim") {
-  return (
-    <View style={styles.container}>
+    return (
+      <View style={styles.container}>
 
-      <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // ลองให้หน้าเคลมย้อนกลับภายในตัวเองก่อน (เช่น จากฟอร์ม กลับไปหน้าเลือกสินค้า)
-            // ถ้าไม่มีอะไรให้ย้อนแล้ว ค่อยออกจากหน้านี้กลับไปหน้าที่กดเข้ามา
-            const handledInternally = claimScreenRef.current?.goBack();
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="เคลมสินค้า"
+              onPress={() => {
+                // ลองให้หน้าเคลมย้อนกลับภายในตัวเองก่อน (เช่น จากฟอร์ม กลับไปหน้าเลือกสินค้า)
+                // ถ้าไม่มีอะไรให้ย้อนแล้ว ค่อยออกจากหน้านี้กลับไปหน้าที่กดเข้ามา
+                const handledInternally = claimScreenRef.current?.goBack();
 
-            if (!handledInternally) {
-              setScreen(claimOrigin);
-              setClaimTarget(null);
-            }
-          }}
-        >
-          
-            <Text style={styles.backText}>
-              {claimOrigin === "orders" ? "← ประวัติการสั่งซื้อ" : "← Products"}
-            </Text>
-          </TouchableOpacity>
+                if (!handledInternally) {
+                  setScreen(claimOrigin);
+                  setClaimTarget(null);
+                }
+              }}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>เคลมสินค้า</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
           <ClaimScreen
-          ref={claimScreenRef}
-          order={claimTarget?.order} 
-          item={claimTarget?.item} />
+            ref={claimScreenRef}
+            order={claimTarget?.order}
+            item={claimTarget?.item}
+          />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -323,21 +525,26 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              setScreen("products");
-              setSelectedProduct(null);
-            }}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="รายละเอียดสินค้า"
+              onPress={() => {
+                setScreen("products");
+                setSelectedProduct(null);
+              }}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>รายละเอียดสินค้า</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -350,6 +557,17 @@ export default function HomeScreen() {
           />
         </View>
 
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
       </View>
     );
   }
@@ -359,18 +577,23 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="Home"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>สินค้าที่ถูกใจ</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -382,6 +605,19 @@ export default function HomeScreen() {
           />
         </View>
 
+        <BottomTabBar active="products" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
       </View>
     );
   }
@@ -391,23 +627,52 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="แดชบอร์ด"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>แดชบอร์ด</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
+
+        <AdminNavTabs
+          active="dashboard"
+          onNavigate={handleAdminNavigate}
+          ordersCount={adminPendingOrders}
+          claimsCount={adminPendingClaims}
+        />
 
         <View style={styles.content}>
-          <DashboardScreen />
+          <DashboardScreen
+            onOpenStock={() => setScreen("adminProducts")}
+            onOpenOrders={() => { setAdminOrdersInitialSearch(""); setScreen("adminOrders"); }}
+            onOpenClaims={() => setScreen("adminClaims")}
+            onOpenDiscounts={() => setScreen("adminDiscounts")}
+            onBackToStore={() => setScreen("products")}
+          />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -418,23 +683,46 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ออเดอร์"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>จัดการออเดอร์</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
+
+        <AdminNavTabs
+          active="orders"
+          onNavigate={handleAdminNavigate}
+          ordersCount={adminPendingOrders}
+          claimsCount={adminPendingClaims}
+        />
 
         <View style={styles.content}>
-          <AdminOrdersScreen />
+          <AdminOrdersScreen initialSearch={adminOrdersInitialSearch} />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -445,23 +733,51 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="เคลมสินค้า"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>จัดการคำขอเคลม</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
+
+        <AdminNavTabs
+          active="claims"
+          onNavigate={handleAdminNavigate}
+          ordersCount={adminPendingOrders}
+          claimsCount={adminPendingClaims}
+        />
 
         <View style={styles.content}>
-          <AdminClaimsScreen />
+          <AdminClaimsScreen
+            onOpenOrder={(orderId) => {
+              setAdminOrdersInitialSearch(String(orderId));
+              setScreen("adminOrders");
+            }}
+          />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -472,23 +788,96 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ส่วนลด"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>จัดการส่วนลด</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
+
+        <AdminNavTabs
+          active="discounts"
+          onNavigate={handleAdminNavigate}
+          ordersCount={adminPendingOrders}
+          claimsCount={adminPendingClaims}
+        />
 
         <View style={styles.content}>
           <AdminDiscountsScreen />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
+      </View>
+    );
+  }
+
+  if (screen === "adminProducts" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="จัดการสินค้า"
+              onPress={() => setScreen("products")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
+
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <AdminNavTabs
+          active="products"
+          onNavigate={handleAdminNavigate}
+          ordersCount={adminPendingOrders}
+          claimsCount={adminPendingClaims}
+        />
+
+        <View style={styles.content}>
+          <AdminProductsScreen />
+        </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -499,23 +888,39 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ร้านค้าเหรียญ (แอดมิน)"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>จัดการร้านค้าเหรียญ</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
           <AdminCoinRewardsScreen />
         </View>
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -526,23 +931,41 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ร้านแลกของรางวัล"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>ร้านค้าเหรียญ</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
-          <CoinShopScreen />
+          <CoinShopScreen onOpenHistory={() => setScreen("coins")} />
         </View>
+
+        <BottomTabBar active="coins" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
 
       </View>
     );
@@ -553,22 +976,181 @@ export default function HomeScreen() {
       <View style={styles.container}>
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setScreen("products")}
-          >
-            <Text style={styles.backText}>
-              ← Products
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="Profile"
+              onPress={() => setScreen("products")}
+            />
+          </View>
 
-          <Text style={styles.screenTitle}>ตั้งค่าโปรไฟล์</Text>
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <View style={{ width: 90 }} />
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
         </View>
 
         <View style={styles.content}>
-          <ProfileScreen />
+          <ProfileScreen
+            isAdmin={isAdmin}
+            onDashboard={() => setScreen("dashboard")}
+            onOrders={() => setScreen("orders")}
+            onWishlist={() => setScreen("wishlist")}
+            onSettings={() => setScreen("settings")}
+            onLogout={confirmLogout}
+            onAvatarChange={setAvatarUrl}
+          />
+        </View>
+
+        <BottomTabBar active="menu" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
+      </View>
+    );
+  }
+
+  // หน้าตั้งค่า: แก้ไขข้อมูลส่วนตัว/เปลี่ยนรหัสผ่าน/การตั้งค่าทั่วไป เข้าถึงจากปุ่มในหน้าโปรไฟล์หลัก
+  if (screen === "settings") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ตั้งค่า"
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
+
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <SettingsScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  // หน้าเมนูเต็มหน้าจอ: เข้าถึงจากแถบเมนูล่าง (ปุ่ม "เมนู") — สลับระบบกับปุ่มรูปโปรไฟล์มุมขวาบนแล้ว
+  // (ปุ่มรูปโปรไฟล์กดแล้วพาไปหน้าโปรไฟล์โดยตรง ส่วนทางลัดอื่นๆ ที่เคยอยู่ในดรอปดาวน์ย้ายมาอยู่ที่นี่แทน)
+  if (screen === "menu") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="เมนู"
+              onPress={() => setScreen("products")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
+
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <MenuScreen
+            username={user?.username}
+            roleLabel={isAdmin ? "Admin" : "User"}
+            isAdmin={isAdmin}
+            avatarUrl={avatarUrl}
+            onDashboard={() => setScreen("dashboard")}
+            onAdminProducts={() => setScreen("adminProducts")}
+            onAdminOrders={() => { setAdminOrdersInitialSearch(""); setScreen("adminOrders"); }}
+            onAdminClaims={() => setScreen("adminClaims")}
+            onAdminDiscounts={() => setScreen("adminDiscounts")}
+            onAdminCoinRewards={() => setScreen("adminCoinRewards")}
+            onOrders={() => setScreen("orders")}
+            onClaims={() => {
+              setClaimTarget(null);
+              setClaimOrigin("menu");
+              setScreen("claim");
+            }}
+            onCoins={() => setScreen("coins")}
+            onCoinShop={() => setScreen("coinShop")}
+            onWishlist={() => setScreen("wishlist")}
+            onProfile={() => setScreen("profile")}
+            onLogout={confirmLogout}
+          />
+        </View>
+
+        <BottomTabBar active="menu" cartCount={cartCount} onNavigate={handleTabNavigate} />
+
+        <ConfirmDialog
+          visible={logoutDialogVisible}
+          title="ออกจากระบบ"
+          message="ต้องการออกจากระบบใช่หรือไม่?"
+          confirmText="ออกจากระบบ"
+          cancelText="ยกเลิก"
+          destructive
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+
+      </View>
+    );
+  }
+
+  // หน้าแจ้งเตือนเต็มหน้าจอ: เข้าถึงจากปุ่มกระดิ่งที่ header ทุกหน้า
+  if (screen === "notifications") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="การแจ้งเตือน"
+              onPress={() => setScreen("products")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <NotificationsScreen isAdmin={isAdmin} />
         </View>
 
       </View>
@@ -584,6 +1166,7 @@ export default function HomeScreen() {
         <View style={styles.headerLeft}>
           <ShopLogo
             isMobile={isMobile}
+            subtitle="Home"
             onPress={() => {
               setSelectedProduct(null);
               setClaimTarget(null);
@@ -593,93 +1176,13 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          {isAdmin && (
-            <TouchableOpacity
-              style={styles.addButton}
-              activeOpacity={0.5}
-              onPress={() => setScreen("add")}
-            >
-              <Text style={styles.addButtonText}>
-                {isMobile ? "＋" : "+ Add Product"}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <NotificationBell isAdmin={isAdmin} onPress={() => setScreen("notifications")} />
 
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.6}
-            onPress={() => setScreen("coins")}
-          >
-            <Text style={styles.cartIconText}>🪙</Text>
-
-            {coinBalance > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {coinBalance > 99 ? "99+" : coinBalance}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.6}
-            onPress={() => setScreen("wishlist")}
-          >
-            <Text style={styles.cartIconText}>♡</Text>
-
-            {wishlistItems.length > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {wishlistItems.length > 99 ? "99+" : wishlistItems.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-<TouchableOpacity
-  style={styles.iconButton}
-  activeOpacity={0.6}
-  onPress={() => {
-    setClaimTarget(null);
-    setClaimOrigin("products");
-    setScreen("claim");
-  }}
->
-  <Text style={styles.cartIconText}>📋</Text>
-</TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.cartIconButton}
-            activeOpacity={0.6}
-            onPress={() => setScreen("cart")}
-          >
-            <Text style={styles.cartIconText}>🛒</Text>
-
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {cartCount > 99 ? "99+" : cartCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* UserMenu ย้ายมาอยู่ขวาสุดเสมอ ไม่ว่าจอกว้างหรือแคบ */}
-          <UserMenu
+          {/* ปุ่มรูปโปรไฟล์อยู่ขวาสุดเสมอ ไม่ว่าจอกว้างหรือแคบ */}
+          <HeaderAvatarButton
             username={user?.username}
-            roleLabel={isAdmin ? "Admin" : "User"}
-            isAdmin={isAdmin}
-            onDashboard={() => setScreen("dashboard")}
-            onAdminOrders={() => setScreen("adminOrders")}
-            onAdminClaims={() => setScreen("adminClaims")}
-            onAdminDiscounts={() => setScreen("adminDiscounts")}
-            onAdminCoinRewards={() => setScreen("adminCoinRewards")}
-            onOrders={() => setScreen("orders")}
-            onCoins={() => setScreen("coins")}
-            onCoinShop={() => setScreen("coinShop")}
-            onProfile={() => setScreen("profile")}
-            onLogout={confirmLogout}
+            avatarUrl={avatarUrl}
+            onPress={() => setScreen("profile")}
           />
         </View>
 
@@ -700,22 +1203,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* FLOATING CART BUTTON */}
-      <TouchableOpacity
-        style={styles.floatingCart}
-        activeOpacity={0.7}
-        onPress={() => setScreen("cart")}
-      >
-        <Text style={styles.cartIconText}>🛒</Text>
-
-        {cartCount > 0 && (
-          <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>
-              {cartCount > 99 ? "99+" : cartCount}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      <BottomTabBar active="products" cartCount={cartCount} onNavigate={handleTabNavigate} />
 
       <ConfirmDialog
         visible={logoutDialogVisible}
@@ -735,7 +1223,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F6F3",
+    backgroundColor: "#F0E9DC",
   },
 
   topBar: {
@@ -771,7 +1259,7 @@ const styles = StyleSheet.create({
   },
 
   addButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -782,7 +1270,7 @@ const styles = StyleSheet.create({
   },
 
   addButtonText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -790,7 +1278,7 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   // ปุ่มตะกร้าลอยมุมขวาล่าง
@@ -803,7 +1291,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -820,10 +1308,34 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
 
     zIndex: 101,
     elevation: 101,
+  },
+
+  iconButtonPlain: {
+    position: "relative",
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  headerIconText: {
+    fontSize: 18,
+  },
+
+  notificationDot: {
+    position: "absolute",
+    top: 8,
+    right: 9,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#D97706",
+    borderWidth: 1.5,
+    borderColor: "#F0E9DC",
   },
 
   cartIconText: {
@@ -860,7 +1372,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   content: {

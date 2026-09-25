@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { DiscountCode, checkout, fetchMyDiscountCodes, validateDiscountCode } from "./api";
+import Icon from "./components/Icon";
 import { PaymentMethod, PAYMENT_METHOD_LABELS } from "./components/Receipt";
 
 interface ConfirmItem {
@@ -37,11 +38,16 @@ interface Props {
 
 const VAT_RATE = 0.07;
 
-const PAYMENT_OPTIONS: { value: PaymentMethod; icon: string }[] = [
-  { value: "cod", icon: "💵" },
-  { value: "bank_transfer", icon: "🏦" },
-  { value: "promptpay", icon: "📱" },
-  { value: "credit_card", icon: "💳" },
+const PAYMENT_OPTIONS: { value: PaymentMethod; icon: string; subtitle: string; badge?: string }[] = [
+  {
+    value: "promptpay",
+    icon: "qr_code_2",
+    subtitle: "สแกนจ่ายสะดวกรวดเร็ว ไม่มีค่าธรรมเนียม",
+    badge: "แนะนำ",
+  },
+  { value: "credit_card", icon: "credit_card", subtitle: "Visa, Mastercard, JCB" },
+  { value: "bank_transfer", icon: "account_balance", subtitle: "โอนผ่านแอปธนาคารของคุณ" },
+  { value: "cod", icon: "payments", subtitle: "ชำระเงินสดกับเจ้าหน้าที่จัดส่งสินค้า" },
 ];
 
 // หน้ายืนยันคำสั่งซื้อ: สรุปรายการ, ใส่โค้ดส่วนลด, แยกยอด VAT 7%, เลือกวิธีชำระเงิน แล้วค่อยยิง checkout จริง
@@ -133,8 +139,9 @@ export default function OrderConfirmScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>ยืนยันคำสั่งซื้อ</Text>
+    <View style={styles.screen}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>ยืนยันคำสั่งซื้อ</Text>
 
       {/* สรุปรายการสินค้า */}
       <View style={styles.card}>
@@ -276,7 +283,7 @@ export default function OrderConfirmScreen({
 
       {/* เลือกวิธีชำระเงิน */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>เลือกวิธีชำระเงิน</Text>
+        <Text style={styles.cardTitle}>ช่องทางการชำระเงิน</Text>
 
         {PAYMENT_OPTIONS.map((option) => {
           const selected = paymentMethod === option.value;
@@ -288,20 +295,34 @@ export default function OrderConfirmScreen({
               activeOpacity={0.7}
               onPress={() => setPaymentMethod(option.value)}
             >
-              <View style={styles.radioOuter}>
-                {selected && <View style={styles.radioInner} />}
+              <View style={styles.paymentIconCircle}>
+                <Icon name={option.icon} size={19} color="#3D2619" />
               </View>
 
-              <Text style={styles.paymentIcon}>{option.icon}</Text>
+              <View style={{ flex: 1 }}>
+                <View style={styles.paymentLabelRow}>
+                  <Text
+                    style={[
+                      styles.paymentLabel,
+                      selected && styles.paymentLabelSelected,
+                    ]}
+                  >
+                    {PAYMENT_METHOD_LABELS[option.value]}
+                  </Text>
 
-              <Text
-                style={[
-                  styles.paymentLabel,
-                  selected && styles.paymentLabelSelected,
-                ]}
-              >
-                {PAYMENT_METHOD_LABELS[option.value]}
-              </Text>
+                  {option.badge && (
+                    <View style={styles.paymentBadge}>
+                      <Text style={styles.paymentBadgeText}>{option.badge}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <Text style={styles.paymentSubtitle}>{option.subtitle}</Text>
+              </View>
+
+              <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+                {selected && <Icon name="check" size={12} color="#FFFFFF" weight={700} />}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -314,21 +335,6 @@ export default function OrderConfirmScreen({
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.confirmButton, submitting && styles.confirmButtonDisabled]}
-        activeOpacity={0.8}
-        disabled={submitting}
-        onPress={handleConfirm}
-      >
-        {submitting ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        ) : (
-          <Text style={styles.confirmButtonText}>
-            ยืนยันการสั่งซื้อ · ฿{grandTotal.toLocaleString("th-TH")}
-          </Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
         style={styles.backLink}
         activeOpacity={0.7}
         onPress={onBack}
@@ -336,25 +342,54 @@ export default function OrderConfirmScreen({
       >
         <Text style={styles.backLinkText}>‹ กลับไปที่ตะกร้า</Text>
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+
+      {/* แถบสรุปยอด + ปุ่มยืนยันลอยด้านล่าง */}
+      <View style={styles.bottomBar}>
+        <View>
+          <Text style={styles.bottomBarLabel}>ยอดชำระสุทธิ</Text>
+          <Text style={styles.bottomBarValue}>฿{grandTotal.toLocaleString("th-TH")}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.confirmButton, submitting && styles.confirmButtonDisabled]}
+          activeOpacity={0.8}
+          disabled={submitting}
+          onPress={handleConfirm}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.confirmButtonText}>ยืนยันคำสั่งซื้อ</Text>
+              <Icon name="arrow_forward" size={16} color="#FFFFFF" weight={700} />
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#F0E9DC",
+  },
+
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
   },
 
   content: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 24,
   },
 
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 16,
   },
 
@@ -362,7 +397,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDEDED",
+    borderColor: "#E8DFD8",
     padding: 16,
     marginBottom: 14,
   },
@@ -370,7 +405,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
     marginBottom: 12,
   },
 
@@ -382,7 +417,7 @@ const styles = StyleSheet.create({
 
   itemName: {
     fontSize: 13,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     flex: 1,
     paddingRight: 8,
   },
@@ -390,7 +425,7 @@ const styles = StyleSheet.create({
   itemTotal: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   priceRow: {
@@ -401,18 +436,18 @@ const styles = StyleSheet.create({
 
   priceLabel: {
     fontSize: 13,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   priceValue: {
     fontSize: 13,
-    color: "#6B6B6B",
+    color: "#50453E",
   },
 
   discountValueText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#1E8E3E",
+    color: "#2D6A4F",
   },
 
   discountInputRow: {
@@ -422,18 +457,18 @@ const styles = StyleSheet.create({
 
   discountInput: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13.5,
-    color: "#2B2B31",
+    color: "#2B2118",
   },
 
   applyButton: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 10,
     paddingHorizontal: 18,
     justifyContent: "center",
@@ -448,7 +483,7 @@ const styles = StyleSheet.create({
 
   discountErrorText: {
     fontSize: 12,
-    color: "#B3413E",
+    color: "#C53030",
     marginTop: 8,
   },
 
@@ -459,7 +494,7 @@ const styles = StyleSheet.create({
   savedCodesLabel: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: "#8A8A8A",
+    color: "#8A7D75",
     marginBottom: 8,
   },
 
@@ -471,22 +506,22 @@ const styles = StyleSheet.create({
 
   savedCodeChip: {
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F0E9DC",
   },
 
   savedCodeChipCode: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   savedCodeChipValue: {
     fontSize: 11,
-    color: "#1E8E3E",
+    color: "#2D6A4F",
     fontWeight: "700",
     marginTop: 1,
   },
@@ -502,19 +537,19 @@ const styles = StyleSheet.create({
   appliedDiscountCode: {
     fontSize: 13.5,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   appliedDiscountLabel: {
     fontSize: 11.5,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     marginTop: 1,
   },
 
   appliedDiscountAmount: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#1E8E3E",
+    color: "#2D6A4F",
     marginRight: 12,
   },
 
@@ -525,96 +560,135 @@ const styles = StyleSheet.create({
   removeDiscountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#B3413E",
+    color: "#C53030",
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#EDEDED",
+    backgroundColor: "#E8DFD8",
     marginVertical: 8,
   },
 
   grandTotalLabel: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   grandTotalValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#111111",
+    color: "#3D2619",
   },
 
   paymentOption: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
-    borderRadius: 10,
+    borderColor: "#E8DFD8",
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     marginBottom: 10,
   },
 
   paymentOptionSelected: {
-    borderColor: "#111111",
-    backgroundColor: "#F7F6F3",
+    borderColor: "#3D2619",
+    backgroundColor: "#F6F3EE",
   },
 
   radioOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    borderColor: "#B0B0B0",
+    borderColor: "#D4C3BA",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    marginLeft: 10,
   },
 
-  radioInner: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: "#111111",
+  radioOuterSelected: {
+    backgroundColor: "#3D2619",
+    borderColor: "#3D2619",
+  },
+
+  radioCheck: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  paymentIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#F0EDE9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
 
   paymentIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: 17,
+  },
+
+  paymentLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 
   paymentLabel: {
     fontSize: 13.5,
-    color: "#4A4A4A",
+    color: "#4A3B32",
     fontWeight: "600",
   },
 
   paymentLabelSelected: {
-    color: "#111111",
+    color: "#3D2619",
+  },
+
+  paymentBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 20,
+  },
+
+  paymentBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#D97706",
+  },
+
+  paymentSubtitle: {
+    fontSize: 11.5,
+    color: "#8A7D75",
+    marginTop: 2,
   },
 
   disclaimer: {
     fontSize: 11.5,
-    color: "#B0B0B0",
+    color: "#8A7D75",
     textAlign: "center",
     marginBottom: 16,
   },
 
   error: {
     fontSize: 13,
-    color: "#B3413E",
+    color: "#C53030",
     textAlign: "center",
     marginBottom: 12,
   },
 
   confirmButton: {
-    backgroundColor: "#111111",
-    paddingVertical: 15,
+    backgroundColor: "#3D2619",
+    paddingVertical: 14,
+    paddingHorizontal: 22,
     borderRadius: 12,
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "center",
   },
 
   confirmButtonDisabled: {
@@ -627,6 +701,28 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  bottomBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E8DFD8",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+
+  bottomBarLabel: {
+    fontSize: 11.5,
+    color: "#8A7D75",
+  },
+
+  bottomBarValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#3D2619",
+  },
+
   backLink: {
     alignItems: "center",
     paddingVertical: 8,
@@ -635,6 +731,6 @@ const styles = StyleSheet.create({
   backLinkText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#4A4A4A",
+    color: "#4A3B32",
   },
 });

@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from "react";
 
 import { loginRequest, registerRequest } from "../api/auth";
+import { updateProfile } from "../api";
 import { clearSession, loadSession, saveSession } from "../lib/authStorage";
 import type { AuthUser } from "../types/auth";
 
@@ -16,8 +17,8 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   isAdmin: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (username: string, password: string, fullName?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -44,19 +45,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = async (
+    username: string,
+    password: string,
+    rememberMe: boolean = true
+  ) => {
     const { token: newToken, user: newUser } = await loginRequest(
       username,
       password
     );
 
-    await saveSession(newToken, newUser);
+    await saveSession(newToken, newUser, rememberMe);
 
     setToken(newToken);
     setUser(newUser);
   };
 
-  const register = async (username: string, password: string) => {
+  const register = async (
+    username: string,
+    password: string,
+    fullName?: string
+  ) => {
     const { token: newToken, user: newUser } = await registerRequest(
       username,
       password
@@ -66,6 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setToken(newToken);
     setUser(newUser);
+
+    // ถ้ากรอกชื่อ-นามสกุล/ชื่อร้านมาตอนสมัคร บันทึกลงโปรไฟล์จริงต่อเลย (คอลัมน์ full_name มีอยู่แล้ว)
+    if (fullName && fullName.trim()) {
+      try {
+        await updateProfile({ full_name: fullName.trim() });
+      } catch (err) {
+        console.error("Save full name after register error:", err);
+      }
+    }
   };
 
   const logout = async () => {

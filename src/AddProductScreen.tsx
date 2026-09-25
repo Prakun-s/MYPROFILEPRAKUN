@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "#F7F6F3",
+    backgroundColor: "#FDFBF7",
   },
 
   content: {
@@ -198,14 +198,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     letterSpacing: -0.3,
-    color: "#2B2B31",
+    color: "#2B2118",
     marginBottom: 22,
   },
 
   label: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6B6B74",
+    color: "#50453E",
     marginBottom: 6,
     marginTop: 14,
   },
@@ -213,12 +213,12 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E3DC",
+    borderColor: "#E8DFD8",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: "#2B2B31",
+    color: "#2B2118",
   },
 
   textArea: {
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
 
   button: {
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "600",
   },

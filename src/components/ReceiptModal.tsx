@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
 
   closeButton: {
     marginTop: 12,
-    backgroundColor: "#111111",
+    backgroundColor: "#3D2619",
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: "center",
