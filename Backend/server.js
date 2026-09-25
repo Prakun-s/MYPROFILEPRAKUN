@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 3090;
 // =========================
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+
 // =========================
 // อัปโหลดรูปโปรไฟล์ (avatar) — เก็บไฟล์จริงไว้ในเครื่อง server แล้ว serve ผ่าน /uploads
 // =========================
@@ -1918,6 +1919,203 @@ app.put(
         message: "Database error",
         error: error.message,
       });
+    }
+  }
+);
+
+// =========================
+// Chat (คุยโต้ตอบระหว่าง user กับ admin) — ระบบมีแอดมินเดียว จึงมี 1 คู่สนทนาต่อ user_id หนึ่งคน
+// ต้องรัน Backend/sql/chat_messages.sql ก่อนใช้งาน
+// =========================
+const CHAT_TABLE_MISSING_MESSAGE =
+  "ยังไม่มีตาราง chat_messages ในฐานข้อมูล — กรุณารัน Backend/sql/chat_messages.sql ก่อน";
+
+function isChatTableMissingError(error) {
+  return error.code === "ER_NO_SUCH_TABLE";
+}
+
+// GET ข้อความแชทของตัวเอง (ฝั่ง user) — เรียกแล้วจะ mark ข้อความจากแอดมินว่าอ่านแล้วอัตโนมัติ
+app.get("/api/chat/my", authenticateToken, async (req, res) => {
+  try {
+    const [messages] = await pool.query(
+      "SELECT id, user_id, sender_role, message, is_read, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at ASC",
+      [req.user.id]
+    );
+
+    await pool.query(
+      "UPDATE chat_messages SET is_read = 1 WHERE user_id = ? AND sender_role = 'admin' AND is_read = 0",
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: messages });
+  } catch (error) {
+    console.error("❌ Get my chat error:", error);
+
+    if (isChatTableMissingError(error)) {
+      return res.status(500).json({ success: false, message: CHAT_TABLE_MISSING_MESSAGE });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// POST ส่งข้อความแชท (ฝั่ง user คุยกับแอดมิน)
+app.post("/api/chat/my/send", authenticateToken, async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: "กรุณากรอกข้อความ" });
+    }
+
+    const [result] = await pool.query(
+      "INSERT INTO chat_messages (user_id, sender_role, message) VALUES (?, 'user', ?)",
+      [req.user.id, message.trim()]
+    );
+
+    res.json({
+      success: true,
+      data: { id: result.insertId, user_id: req.user.id, sender_role: "user", message: message.trim() },
+    });
+  } catch (error) {
+    console.error("❌ Send chat message error:", error);
+
+    if (isChatTableMissingError(error)) {
+      return res.status(500).json({ success: false, message: CHAT_TABLE_MISSING_MESSAGE });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET จำนวนข้อความที่ยังไม่อ่านจากแอดมิน (สำหรับจุดแจ้งเตือนที่ไอคอนแชท)
+app.get("/api/chat/my/unread-count", authenticateToken, async (req, res) => {
+  try {
+    const [[row]] = await pool.query(
+      "SELECT COUNT(*) AS count FROM chat_messages WHERE user_id = ? AND sender_role = 'admin' AND is_read = 0",
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: { count: row.count } });
+  } catch (error) {
+    console.error("❌ Get unread chat count error:", error);
+
+    if (isChatTableMissingError(error)) {
+      return res.json({ success: true, data: { count: 0 } });
+    }
+
+    res.status(500).json({ success: false, message: "Database error", error: error.message });
+  }
+});
+
+// GET รายชื่อบทสนทนาทั้งหมด (เฉพาะ admin) — เรียงตามข้อความล่าสุด พร้อมจำนวนที่ยังไม่อ่าน
+app.get(
+  "/api/admin/chat/conversations",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const [conversations] = await pool.query(`
+        SELECT
+          cm.user_id,
+          u.username,
+          u.full_name,
+          u.avatar_url,
+          MAX(cm.created_at) AS last_message_at,
+          SUM(CASE WHEN cm.sender_role = 'user' AND cm.is_read = 0 THEN 1 ELSE 0 END) AS unread_count
+        FROM chat_messages cm
+        LEFT JOIN users u ON u.id = cm.user_id
+        GROUP BY cm.user_id, u.username, u.full_name, u.avatar_url
+        ORDER BY last_message_at DESC
+      `);
+
+      // เติมข้อความล่าสุดของแต่ละบทสนทนา (MySQL ไม่มีฟังก์ชัน LAST() ในตัว เลยต้อง query แยกทีละคู่สนทนา)
+      for (const conv of conversations) {
+        const [[lastMsg]] = await pool.query(
+          "SELECT message, sender_role FROM chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+          [conv.user_id]
+        );
+        conv.last_message = lastMsg?.message || "";
+        conv.last_sender_role = lastMsg?.sender_role || "user";
+        conv.unread_count = Number(conv.unread_count);
+      }
+
+      res.json({ success: true, data: conversations });
+    } catch (error) {
+      console.error("❌ Get chat conversations error:", error);
+
+      if (isChatTableMissingError(error)) {
+        return res.json({ success: true, data: [] });
+      }
+
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// GET ข้อความแชทของ user คนใดคนหนึ่ง (เฉพาะ admin) — เรียกแล้วจะ mark ข้อความจาก user ว่าอ่านแล้วอัตโนมัติ
+app.get(
+  "/api/admin/chat/:userId",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      const [messages] = await pool.query(
+        "SELECT id, user_id, sender_role, message, is_read, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at ASC",
+        [userId]
+      );
+
+      await pool.query(
+        "UPDATE chat_messages SET is_read = 1 WHERE user_id = ? AND sender_role = 'user' AND is_read = 0",
+        [userId]
+      );
+
+      res.json({ success: true, data: messages });
+    } catch (error) {
+      console.error("❌ Get admin chat thread error:", error);
+
+      if (isChatTableMissingError(error)) {
+        return res.status(500).json({ success: false, message: CHAT_TABLE_MISSING_MESSAGE });
+      }
+
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
+    }
+  }
+);
+
+// POST ส่งข้อความแชท (ฝั่งแอดมินตอบกลับ user คนใดคนหนึ่ง)
+app.post(
+  "/api/admin/chat/:userId/send",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { message } = req.body;
+
+      if (!message || !message.trim()) {
+        return res.status(400).json({ success: false, message: "กรุณากรอกข้อความ" });
+      }
+
+      const [result] = await pool.query(
+        "INSERT INTO chat_messages (user_id, sender_role, message) VALUES (?, 'admin', ?)",
+        [userId, message.trim()]
+      );
+
+      res.json({
+        success: true,
+        data: { id: result.insertId, user_id: Number(userId), sender_role: "admin", message: message.trim() },
+      });
+    } catch (error) {
+      console.error("❌ Admin send chat message error:", error);
+
+      if (isChatTableMissingError(error)) {
+        return res.status(500).json({ success: false, message: CHAT_TABLE_MISSING_MESSAGE });
+      }
+
+      res.status(500).json({ success: false, message: "Database error", error: error.message });
     }
   }
 );

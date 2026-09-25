@@ -10,6 +10,8 @@ import {
 
 import AddProductScreen from "../AddProductScreen";
 import { fetchAllClaims, fetchAllOrders, fetchProfile } from "../api";
+import AdminChatListScreen from "../AdminChatListScreen";
+import AdminChatScreen from "../AdminChatScreen";
 import AdminClaimsScreen from "../AdminClaimsScreen";
 import AdminCoinRewardsScreen from "../AdminCoinRewardsScreen";
 import AdminDiscountsScreen from "../AdminDiscountsScreen";
@@ -18,6 +20,7 @@ import AdminProductsScreen from "../AdminProductsScreen";
 import AdminNavTabs, { AdminTabKey } from "../components/AdminNavTabs";
 import BottomTabBar, { TabKey } from "../components/BottomTabBar";
 import CartScreen, { CartScreenHandle } from "../CartScreen";
+import ChatScreen from "../ChatScreen";
 import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
 import CoinShopScreen from "../CoinShopScreen";
 import CoinsScreen from "../CoinsScreen";
@@ -150,9 +153,15 @@ export default function HomeScreen() {
     | "menu"
     | "notifications"
     | "settings"
+    | "chat"
+    | "adminChatList"
+    | "adminChat"
   >("products");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
+  // ผู้ใช้ที่แอดมินกำลังเปิดคุยด้วย (เลือกจาก AdminChatListScreen แล้วเข้าหน้า AdminChatScreen)
+  const [chatUserId, setChatUserId] = useState<number | null>(null);
+  const [chatUserName, setChatUserName] = useState("");
   const [claimTarget, setClaimTarget] = useState<{
     order: ClaimOrder;
     item: ClaimOrderItem;
@@ -659,6 +668,7 @@ export default function HomeScreen() {
             onOpenOrders={() => { setAdminOrdersInitialSearch(""); setScreen("adminOrders"); }}
             onOpenClaims={() => setScreen("adminClaims")}
             onOpenDiscounts={() => setScreen("adminDiscounts")}
+            onOpenChats={() => setScreen("adminChatList")}
             onBackToStore={() => setScreen("products")}
           />
         </View>
@@ -1095,12 +1105,14 @@ export default function HomeScreen() {
             onAdminClaims={() => setScreen("adminClaims")}
             onAdminDiscounts={() => setScreen("adminDiscounts")}
             onAdminCoinRewards={() => setScreen("adminCoinRewards")}
+            onAdminChat={() => setScreen("adminChatList")}
             onOrders={() => setScreen("orders")}
             onClaims={() => {
               setClaimTarget(null);
               setClaimOrigin("menu");
               setScreen("claim");
             }}
+            onChat={() => setScreen("chat")}
             onCoins={() => setScreen("coins")}
             onCoinShop={() => setScreen("coinShop")}
             onWishlist={() => setScreen("wishlist")}
@@ -1121,6 +1133,105 @@ export default function HomeScreen() {
           onConfirm={handleConfirmLogout}
           onCancel={handleCancelLogout}
         />
+
+      </View>
+    );
+  }
+
+  // หน้าแชทเต็มหน้าจอฝั่ง user: คุยกับแอดมินโดยตรง (เข้าถึงจากเมนู "แชทกับแอดมิน")
+  if (screen === "chat") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="แชทกับแอดมิน"
+              onPress={() => setScreen("menu")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <ChatScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  // หน้ารายชื่อบทสนทนาเต็มหน้าจอ ฝั่งแอดมิน: เข้าถึงจากเมนู/แดชบอร์ด "ข้อความจากลูกค้า"
+  if (screen === "adminChatList" && isAdmin) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle="ข้อความจากลูกค้า"
+              onPress={() => setScreen("menu")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <AdminChatListScreen
+            onOpenConversation={(userId, displayName) => {
+              setChatUserId(userId);
+              setChatUserName(displayName);
+              setScreen("adminChat");
+            }}
+          />
+        </View>
+
+      </View>
+    );
+  }
+
+  // หน้าแชทเต็มหน้าจอฝั่งแอดมิน: คุยกับ user คนที่เลือกจาก AdminChatListScreen
+  if (screen === "adminChat" && isAdmin && chatUserId !== null) {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <ShopLogo
+              isMobile={isMobile}
+              subtitle={chatUserName || "แชท"}
+              onPress={() => setScreen("adminChatList")}
+            />
+          </View>
+
+          <View style={styles.headerRight}>
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <AdminChatScreen userId={chatUserId} />
+        </View>
 
       </View>
     );

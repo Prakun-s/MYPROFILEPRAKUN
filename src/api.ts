@@ -9,6 +9,7 @@ async function authHeaders() {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
+
 // อัปโหลดรูปโปรไฟล์จริงจากเครื่องผู้ใช้ (ไม่ใช่แค่วาง URL) — ส่งเป็น multipart/form-data
 // ต้องไม่ตั้ง Content-Type เอง ปล่อยให้ browser ใส่ boundary ให้อัตโนมัติ
 export async function uploadAvatar(file: Blob, filename?: string) {
@@ -831,4 +832,120 @@ export async function fetchDashboardSummary() {
   }
 
   return result.data;
+}
+
+// ===== แชทระหว่าง user กับ admin =====
+
+export interface ChatMessage {
+  id: number;
+  user_id: number;
+  sender_role: "user" | "admin";
+  message: string;
+  is_read: boolean | number;
+  created_at: string;
+}
+
+export interface ChatConversation {
+  user_id: number;
+  username: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  last_message: string;
+  last_sender_role: "user" | "admin";
+  last_message_at: string;
+  unread_count: number;
+}
+
+// ฝั่ง user: โหลดข้อความแชทของตัวเอง (เรียกแล้วข้อความจากแอดมินจะถูก mark ว่าอ่านแล้วอัตโนมัติ)
+export async function fetchMyChat(): Promise<ChatMessage[]> {
+  const response = await fetch(`${API_URL}/api/chat/my`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดข้อความแชทได้");
+  }
+
+  return result.data;
+}
+
+// ฝั่ง user: ส่งข้อความหาแอดมิน
+export async function sendMyChatMessage(message: string) {
+  const response = await fetch(`${API_URL}/api/chat/my/send`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ message }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ส่งข้อความไม่สำเร็จ");
+  }
+
+  return result.data as ChatMessage;
+}
+
+// ฝั่ง user: จำนวนข้อความที่ยังไม่อ่านจากแอดมิน (ใช้แสดงจุดแจ้งเตือน)
+export async function fetchMyChatUnreadCount(): Promise<number> {
+  const response = await fetch(`${API_URL}/api/chat/my/unread-count`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดจำนวนแจ้งเตือนได้");
+  }
+
+  return result.data.count;
+}
+
+// ฝั่ง admin: รายชื่อบทสนทนาทั้งหมด เรียงตามข้อความล่าสุด
+export async function fetchAdminChatConversations(): Promise<ChatConversation[]> {
+  const response = await fetch(`${API_URL}/api/admin/chat/conversations`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดรายชื่อบทสนทนาได้");
+  }
+
+  return result.data;
+}
+
+// ฝั่ง admin: โหลดข้อความแชทของ user คนใดคนหนึ่ง (เรียกแล้วข้อความจาก user จะถูก mark ว่าอ่านแล้วอัตโนมัติ)
+export async function fetchAdminChatThread(userId: number): Promise<ChatMessage[]> {
+  const response = await fetch(`${API_URL}/api/admin/chat/${userId}`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดข้อความแชทได้");
+  }
+
+  return result.data;
+}
+
+// ฝั่ง admin: ส่งข้อความตอบกลับ user คนใดคนหนึ่ง
+export async function sendAdminChatMessage(userId: number, message: string) {
+  const response = await fetch(`${API_URL}/api/admin/chat/${userId}/send`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ message }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ส่งข้อความไม่สำเร็จ");
+  }
+
+  return result.data as ChatMessage;
 }

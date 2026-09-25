@@ -20,8 +20,10 @@ interface Props {
   onAdminClaims: () => void;
   onAdminDiscounts: () => void;
   onAdminCoinRewards: () => void;
+  onAdminChat: () => void;
   onOrders: () => void;
   onClaims: () => void;
+  onChat: () => void;
   onCoins: () => void;
   onCoinShop: () => void;
   onWishlist: () => void;
@@ -42,8 +44,10 @@ export default function MenuScreen({
   onAdminClaims,
   onAdminDiscounts,
   onAdminCoinRewards,
+  onAdminChat,
   onOrders,
   onClaims,
+  onChat,
   onCoins,
   onCoinShop,
   onWishlist,
@@ -57,11 +61,13 @@ export default function MenuScreen({
     { key: "adminClaims", label: "จัดการคำขอเคลม", icon: "build", onPress: onAdminClaims },
     { key: "adminDiscounts", label: "จัดการส่วนลด", icon: "sell", onPress: onAdminDiscounts },
     { key: "adminCoinRewards", label: "จัดการร้านค้าเหรียญ", icon: "redeem", onPress: onAdminCoinRewards },
+    { key: "adminChat", label: "ข้อความจากลูกค้า", icon: "forum", onPress: onAdminChat },
   ];
 
   const accountActions: MenuAction[] = [
     { key: "orders", label: "ประวัติการสั่งซื้อ", icon: "receipt_long", onPress: onOrders },
     { key: "claims", label: "เคลมสินค้า", icon: "assignment_return", onPress: onClaims },
+    { key: "chat", label: "แชทกับแอดมิน", icon: "forum", onPress: onChat },
     { key: "coins", label: "เหรียญสะสม", icon: "monetization_on", onPress: onCoins },
     { key: "coinShop", label: "ร้านค้าเหรียญ", icon: "confirmation_number", onPress: onCoinShop },
     { key: "wishlist", label: "สินค้าที่ถูกใจ", icon: "favorite_border", onPress: onWishlist },

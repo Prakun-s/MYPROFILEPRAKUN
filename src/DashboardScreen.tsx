@@ -19,6 +19,7 @@ interface DashboardScreenProps {
   onOpenOrders?: () => void;
   onOpenClaims?: () => void;
   onOpenDiscounts?: () => void;
+  onOpenChats?: () => void;
   onBackToStore?: () => void;
 }
 
@@ -287,6 +288,7 @@ export default function DashboardScreen({
   onOpenOrders,
   onOpenClaims,
   onOpenDiscounts,
+  onOpenChats,
   onBackToStore,
 }: DashboardScreenProps) {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -471,7 +473,7 @@ export default function DashboardScreen({
       {/* เมนูลัดสำหรับผู้ดูแล */}
       <View style={styles.quickHeaderRow}>
         <Text style={styles.quickTitle}>เมนูลัดสำหรับผู้ดูแล</Text>
-        <Text style={styles.quickCount}>4 การจัดการ</Text>
+        <Text style={styles.quickCount}>5 การจัดการ</Text>
       </View>
 
       <View style={styles.quickGrid}>
@@ -528,6 +530,18 @@ export default function DashboardScreen({
           </View>
           <Text style={styles.quickCardTitle}>โค้ดส่วนลด</Text>
           <Text style={styles.quickCardSub}>ดูคูปองร้านค้า</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickCard}
+          activeOpacity={0.8}
+          onPress={onOpenChats}
+        >
+          <View style={[styles.quickIconBox, { backgroundColor: "#EDE4FB" }]}>
+            <Icon name="forum" size={19} color="#6D28D9" />
+          </View>
+          <Text style={styles.quickCardTitle}>ข้อความจากลูกค้า</Text>
+          <Text style={styles.quickCardSub}>คุยโต้ตอบกับลูกค้า</Text>
         </TouchableOpacity>
       </View>
 
