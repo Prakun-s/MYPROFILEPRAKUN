@@ -4,6 +4,9 @@ interface Props {
   isMobile?: boolean;
   onPress?: () => void;
   subtitle?: string;
+  // ระบุความสูงโลโก้เอง (px) เผื่อบางหน้าอยากให้โลโก้ใหญ่กว่าค่ามาตรฐานของ header ทั่วไป
+  // เช่นหน้าเข้าสู่ระบบ ถ้าไม่ระบุจะใช้ขนาดมาตรฐานตาม isMobile เหมือนเดิม
+  height?: number;
 }
 
 // โลโก้ร้าน: ใช้ไฟล์โลโก้จริงของร้าน (assets/images/shop-logo.png) แทนตัวอักษรย่อเดิม
@@ -13,8 +16,8 @@ const LOGO_ASPECT_RATIO = 2062 / 490;
 const LOGO_HEIGHT = 34;
 const LOGO_HEIGHT_MOBILE = 28;
 
-export default function ShopLogo({ isMobile, onPress, subtitle }: Props) {
-  const logoHeight = isMobile ? LOGO_HEIGHT_MOBILE : LOGO_HEIGHT;
+export default function ShopLogo({ isMobile, onPress, subtitle, height }: Props) {
+  const logoHeight = height ?? (isMobile ? LOGO_HEIGHT_MOBILE : LOGO_HEIGHT);
   const logoWidth = logoHeight * LOGO_ASPECT_RATIO;
 
   const content = (

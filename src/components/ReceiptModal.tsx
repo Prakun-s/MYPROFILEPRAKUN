@@ -1,5 +1,7 @@
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { downloadReceiptPdf } from "../lib/receiptPdf";
+import Icon from "./Icon";
 import Receipt, { ReceiptItem } from "./Receipt";
 
 interface Props {
@@ -27,6 +29,19 @@ export default function ReceiptModal({
   discountAmount,
   onClose,
 }: Props) {
+  const handleDownloadPdf = () => {
+    downloadReceiptPdf({
+      orderId,
+      createdAt,
+      items,
+      totalAmount,
+      coinsEarned,
+      paymentMethod,
+      discountCode,
+      discountAmount,
+    });
+  };
+
   return (
     <Modal
       visible={visible}
@@ -48,6 +63,17 @@ export default function ReceiptModal({
               discountAmount={discountAmount}
             />
           </ScrollView>
+
+          {Platform.OS === "web" && (
+            <TouchableOpacity
+              style={styles.downloadButton}
+              activeOpacity={0.8}
+              onPress={handleDownloadPdf}
+            >
+              <Icon name="download" size={16} color="#3D2619" />
+              <Text style={styles.downloadText}>ดาวน์โหลด PDF</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.closeButton}
@@ -82,7 +108,7 @@ const styles = StyleSheet.create({
   },
 
   closeButton: {
-    marginTop: 12,
+    marginTop: 8,
     backgroundColor: "#3D2619",
     borderRadius: 10,
     paddingVertical: 12,
@@ -91,6 +117,25 @@ const styles = StyleSheet.create({
 
   closeText: {
     color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  downloadButton: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#3D2619",
+    borderRadius: 10,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  downloadText: {
+    color: "#3D2619",
     fontSize: 14,
     fontWeight: "700",
   },

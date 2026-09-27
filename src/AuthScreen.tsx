@@ -145,16 +145,7 @@ export default function AuthScreen({ initialTab }: Props) {
         >
           {/* หัวหน้าจอ: โลโก้ร้านเท่านั้น (ยังไม่ login จึงไม่มีค้นหา/แจ้งเตือน/รูปโปรไฟล์) */}
           <View style={styles.header}>
-            <ShopLogo />
-          </View>
-
-          {/* แถบตกแต่งธีมร้านกาแฟ */}
-          <View style={styles.heroBanner}>
-            <View style={styles.heroBadgeWrap}>
-              <View style={styles.heroBadge}>
-                <Icon name="local_cafe" size={24} color="#3D2619" />
-              </View>
-            </View>
+            <ShopLogo height={64} />
           </View>
 
           <View style={styles.card}>
@@ -424,45 +415,15 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    marginBottom: 14,
-  },
-
-  heroBanner: {
-    height: 96,
-    borderRadius: 16,
-    backgroundColor: "#6B4F40",
-    marginBottom: 16,
-    overflow: "visible",
     alignItems: "center",
-    justifyContent: "center",
-  },
-
-  heroBadgeWrap: {
-    position: "absolute",
-    bottom: -20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  heroBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    marginTop: 12,
+    marginBottom: 28,
   },
 
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 20,
-    paddingTop: 32,
     marginTop: 4,
   },
 

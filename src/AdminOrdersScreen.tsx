@@ -15,6 +15,7 @@ import {
 import { fetchAllOrders, updateOrderStatus } from "./api";
 import Icon from "./components/Icon";
 import Toast from "./components/Toast";
+import { buildXlsxBlob } from "./lib/xlsx";
 
 interface OrderItem {
   product_id: number;
@@ -186,33 +187,47 @@ export default function AdminOrdersScreen({ initialSearch }: Props) {
       .length;
   }, [orders]);
 
-  const handleExportCsv = () => {
+  // ส่งออกรายงานเป็นไฟล์ .xlsx ของ Excel จริงๆ (ไม่ใช่แค่ .csv) — ประกอบไฟล์เองด้วย
+  // src/lib/xlsx.ts เพราะ npm registry ถูกบล็อกใน environment นี้ ติดตั้งไลบรารีเพิ่มไม่ได้
+  const handleExportXlsx = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") {
       notify("ส่งออกรายงานได้เฉพาะบนเว็บเบราว์เซอร์");
       return;
     }
 
-    const rows = [
-      ["รหัสออเดอร์", "ลูกค้า", "ยอดรวม", "สถานะ", "วันที่"],
-      ...filteredOrders.map((o) => [
-        orderCode(o.id),
-        o.username || "-",
-        String(o.total_amount),
-        STATUS_OPTIONS.find((s) => s.value === o.status)?.label || o.status,
-        new Date(o.created_at).toLocaleString("th-TH"),
-      ]),
+    const headers = [
+      "รหัสออเดอร์",
+      "ลูกค้า",
+      "ยอดรวม (บาท)",
+      "สถานะ",
+      "ช่องทางชำระเงิน",
+      "โค้ดส่วนลด",
+      "ส่วนลด (บาท)",
+      "รายการสินค้า",
+      "วันที่สั่งซื้อ",
     ];
 
-    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+    const rows = filteredOrders.map((o) => [
+      orderCode(o.id),
+      o.username || "-",
+      Number(o.total_amount),
+      STATUS_OPTIONS.find((s) => s.value === o.status)?.label || o.status,
+      (o.payment_method && PAYMENT_LABELS[o.payment_method]) || o.payment_method || "-",
+      o.discount_code || "-",
+      o.discount_amount ? Number(o.discount_amount) : "-",
+      o.items.map((item) => `${item.product_name} x${item.quantity}`).join(", "),
+      new Date(o.created_at).toLocaleString("th-TH"),
+    ]);
+
+    const blob = buildXlsxBlob("ออเดอร์", headers, rows);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `prakun-orders-${Date.now()}.csv`;
+    link.download = `prakun-orders-${Date.now()}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
 
-    notify(`ส่งออกรายงาน ${filteredOrders.length} รายการแล้ว`);
+    notify(`ส่งออกรายงาน ${filteredOrders.length} รายการแล้ว (.xlsx)`);
   };
 
   if (loading) {
@@ -252,11 +267,11 @@ export default function AdminOrdersScreen({ initialSearch }: Props) {
               <TouchableOpacity
                 style={styles.exportButton}
                 activeOpacity={0.75}
-                onPress={handleExportCsv}
+                onPress={handleExportXlsx}
               >
                 <View style={styles.buttonInlineRow}>
                   <Icon name="download" size={14} color="#3D2619" />
-                  <Text style={styles.exportButtonText}>ส่งออกรายงาน</Text>
+                  <Text style={styles.exportButtonText}>ส่งออกรายงาน (.xlsx)</Text>
                 </View>
               </TouchableOpacity>
             </View>

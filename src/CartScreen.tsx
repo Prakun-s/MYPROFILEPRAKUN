@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import Icon from "./components/Icon";
 import Receipt, { ReceiptItem } from "./components/Receipt";
 import { useCart } from "./context/CartContext";
 import { useCoins } from "./context/CoinContext";
+import { downloadReceiptPdf } from "./lib/receiptPdf";
 import OrderConfirmScreen from "./OrderConfirmScreen";
 
 interface CartItem {
@@ -216,6 +218,28 @@ const CartScreen = forwardRef<CartScreenHandle, Props>(function CartScreen(
           discountCode={successOrder.discount_code}
           discountAmount={successOrder.discount_amount}
         />
+
+        {Platform.OS === "web" && (
+          <TouchableOpacity
+            style={styles.downloadPdfButton}
+            activeOpacity={0.8}
+            onPress={() =>
+              downloadReceiptPdf({
+                orderId: successOrder.id,
+                createdAt: successOrder.created_at,
+                items: successOrder.items,
+                totalAmount: successOrder.total_amount,
+                coinsEarned: successOrder.coins_earned,
+                paymentMethod: successOrder.payment_method,
+                discountCode: successOrder.discount_code,
+                discountAmount: successOrder.discount_amount,
+              })
+            }
+          >
+            <Icon name="download" size={16} color="#3D2619" />
+            <Text style={styles.downloadPdfText}>ดาวน์โหลดใบเสร็จเป็น PDF</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.primaryButton}
@@ -789,6 +813,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#8A6A00",
+  },
+
+  downloadPdfButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#3D2619",
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  downloadPdfText: {
+    color: "#3D2619",
+    fontSize: 13.5,
+    fontWeight: "700",
   },
 
   primaryButton: {

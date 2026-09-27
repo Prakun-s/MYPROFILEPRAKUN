@@ -24,6 +24,7 @@ import ChatScreen from "../ChatScreen";
 import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
 import CoinShopScreen from "../CoinShopScreen";
 import CoinsScreen from "../CoinsScreen";
+import BackButton from "../components/BackButton";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ShopLogo from "../components/ShopLogo";
 import HeaderAvatarButton from "../components/HeaderAvatarButton";
@@ -157,6 +158,28 @@ export default function HomeScreen() {
     | "adminChatList"
     | "adminChat"
   >("products");
+
+  // ประวัติหน้าจริงๆ (ไม่ใช่ปลายทางคงที่) ให้ปุ่มย้อนกลับพาไปหน้าก่อนหน้านี้เสมอ
+  // ไม่ว่าจะมาจากไหน (แท็บล่าง, เมนู, ลิงก์จากหน้าอื่น ฯลฯ) — ทำงานแบบ "ประวัติเบราว์เซอร์"
+  // โดยเก็บ ref ของหน้าก่อนหน้า แล้ว push เข้า stack ทุกครั้งที่ screen เปลี่ยน (ยกเว้นตอนกด "ย้อนกลับ" เอง)
+  const previousScreenRef = useRef(screen);
+  const screenHistoryRef = useRef<(typeof screen)[]>([]);
+  const goingBackRef = useRef(false);
+
+  useEffect(() => {
+    if (!goingBackRef.current) {
+      screenHistoryRef.current.push(previousScreenRef.current);
+    }
+    goingBackRef.current = false;
+    previousScreenRef.current = screen;
+  }, [screen]);
+
+  const goBack = () => {
+    const prev = screenHistoryRef.current.pop();
+    goingBackRef.current = true;
+    setScreen(prev ?? "products");
+  };
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
   // ผู้ใช้ที่แอดมินกำลังเปิดคุยด้วย (เลือกจาก AdminChatListScreen แล้วเข้าหน้า AdminChatScreen)
@@ -181,7 +204,13 @@ export default function HomeScreen() {
   };
 
   // ใช้โดยแถบสลับหน้าแอดมิน (AdminNavTabs) ให้สลับไปหน้าแอดมินที่เลือกได้จากทุกหน้าแอดมิน
+  // ทำเครื่องหมาย goingBackRef ไว้ก่อนสลับทุกครั้ง เพื่อไม่ให้การสลับไปมาระหว่าง
+  // หน้ากลุ่มแอดมินนี้ (แดชบอร์ด/จัดการสินค้า/ออเดอร์/เคลม/ส่วนลด) ถูกนับเป็นประวัติ
+  // ย้อนกลับทีละขั้น — ปุ่มย้อนกลับจากหน้าไหนในกลุ่มนี้ก็ตาม จะย้อนไปหน้าที่เข้ามาก่อนหน้า
+  // กลุ่มนี้เสมอ (ปกติคือหน้าเมนู) ไม่ใช่ไล่ย้อนทีละแท็บที่เคยสลับผ่านมา
   const handleAdminNavigate = (tab: AdminTabKey) => {
+    goingBackRef.current = true;
+
     if (tab === "products") {
       setScreen("adminProducts");
       return;
@@ -231,11 +260,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="เพิ่มสินค้า"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>เพิ่มสินค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -276,14 +302,13 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="แก้ไขสินค้า"
+            <BackButton
               onPress={() => {
-                setScreen("products");
                 setSelectedProduct(null);
+                goBack();
               }}
             />
+            <Text style={styles.screenHeaderTitle}>แก้ไขสินค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -479,20 +504,19 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="เคลมสินค้า"
+            <BackButton
               onPress={() => {
                 // ลองให้หน้าเคลมย้อนกลับภายในตัวเองก่อน (เช่น จากฟอร์ม กลับไปหน้าเลือกสินค้า)
-                // ถ้าไม่มีอะไรให้ย้อนแล้ว ค่อยออกจากหน้านี้กลับไปหน้าที่กดเข้ามา
+                // ถ้าไม่มีอะไรให้ย้อนแล้ว ค่อยออกจากหน้านี้กลับไปหน้าก่อนหน้าจริงๆ
                 const handledInternally = claimScreenRef.current?.goBack();
 
                 if (!handledInternally) {
-                  setScreen(claimOrigin);
                   setClaimTarget(null);
+                  goBack();
                 }
               }}
             />
+            <Text style={styles.screenHeaderTitle}>เคลมสินค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -587,11 +611,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="Home"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>Home</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -637,11 +658,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="แดชบอร์ด"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>แดชบอร์ด</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -694,11 +712,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ออเดอร์"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ออเดอร์</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -744,11 +759,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="เคลมสินค้า"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>เคลมสินค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -799,11 +811,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ส่วนลด"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ส่วนลด</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -849,11 +858,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="จัดการสินค้า"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>จัดการสินค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -899,11 +905,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ร้านค้าเหรียญ (แอดมิน)"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ร้านค้าเหรียญ (แอดมิน)</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -942,11 +945,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ร้านแลกของรางวัล"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ร้านแลกของรางวัล</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -987,11 +987,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="Profile"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>Profile</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1041,11 +1038,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ตั้งค่า"
-              onPress={() => setScreen("profile")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ตั้งค่า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1145,11 +1139,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="แชทกับแอดมิน"
-              onPress={() => setScreen("menu")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>แชทกับแอดมิน</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1176,11 +1167,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="ข้อความจากลูกค้า"
-              onPress={() => setScreen("menu")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>ข้อความจากลูกค้า</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1213,11 +1201,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle={chatUserName || "แชท"}
-              onPress={() => setScreen("adminChatList")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>{chatUserName || "แชท"}</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1244,11 +1229,8 @@ export default function HomeScreen() {
 
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
           <View style={styles.headerLeft}>
-            <ShopLogo
-              isMobile={isMobile}
-              subtitle="การแจ้งเตือน"
-              onPress={() => setScreen("products")}
-            />
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>การแจ้งเตือน</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -1355,6 +1337,14 @@ const styles = StyleSheet.create({
   topBarMobile: {
     height: 56,
     paddingHorizontal: 12,
+  },
+
+  // ชื่อหน้า (ข้อความล้วน) ที่แสดงคู่กับปุ่มย้อนกลับ แทนโลโก้ร้าน
+  // ใช้กับหน้าย่อยทั้งหมดที่กดเข้ามาจากที่อื่น (ไม่ใช่แท็บหลักด้านล่าง)
+  screenHeaderTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#3D2619",
   },
 
   headerLeft: {
