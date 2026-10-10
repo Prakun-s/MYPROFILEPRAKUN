@@ -24,6 +24,7 @@ interface Props {
   onOrders: () => void;
   onClaims: () => void;
   onChat: () => void;
+  onBotChat: () => void;
   onCoins: () => void;
   onCoinShop: () => void;
   onWishlist: () => void;
@@ -48,6 +49,7 @@ export default function MenuScreen({
   onOrders,
   onClaims,
   onChat,
+  onBotChat,
   onCoins,
   onCoinShop,
   onWishlist,
@@ -67,6 +69,7 @@ export default function MenuScreen({
   const accountActions: MenuAction[] = [
     { key: "orders", label: "ประวัติการสั่งซื้อ", icon: "receipt_long", onPress: onOrders },
     { key: "claims", label: "เคลมสินค้า", icon: "assignment_return", onPress: onClaims },
+    { key: "botChat", label: "แชทกับ I AUAN (AI)", icon: "smart_toy", onPress: onBotChat },
     { key: "chat", label: "แชทกับแอดมิน", icon: "forum", onPress: onChat },
     { key: "coins", label: "เหรียญสะสม", icon: "monetization_on", onPress: onCoins },
     { key: "coinShop", label: "ร้านค้าเหรียญ", icon: "confirmation_number", onPress: onCoinShop },

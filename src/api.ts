@@ -35,6 +35,30 @@ export async function uploadAvatar(file: Blob, filename?: string) {
   return result as { success: boolean; url: string };
 }
 
+// อัปโหลดรูปสินค้าจริงจากเครื่องแอดมิน (ไม่ใช่แค่วาง URL) — รูปแบบเดียวกับ uploadAvatar
+export async function uploadProductImage(file: Blob, filename?: string) {
+  const token = await getToken();
+
+  const formData = new FormData();
+  formData.append("image", file, filename || "product.jpg");
+
+  const response = await fetch(`${API_URL}/api/upload/product`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "อัปโหลดรูปไม่สำเร็จ");
+  }
+
+  return result as { success: boolean; url: string };
+}
+
 export async function fetchProducts() {
   const response = await fetch(`${API_URL}/api/products`, {
     headers: await authHeaders(),
@@ -839,7 +863,7 @@ export async function fetchDashboardSummary() {
 export interface ChatMessage {
   id: number;
   user_id: number;
-  sender_role: "user" | "admin";
+  sender_role: "user" | "admin" | "ai";
   message: string;
   is_read: boolean | number;
   created_at: string;
@@ -901,6 +925,65 @@ export async function fetchMyChatUnreadCount(): Promise<number> {
   }
 
   return result.data.count;
+}
+
+// ===== แชทบอท "I AUAN" (AI) — แยกจากแชทกับแอดมิน =====
+// ข้อความของบอทใช้ sender_role = "ai" (ChatMessage ชนิดเดียวกัน)
+
+export async function fetchBotChat(): Promise<ChatMessage[]> {
+  const response = await fetch(`${API_URL}/api/bot/my`, {
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ไม่สามารถโหลดแชทกับ I AUAN ได้");
+  }
+
+  return result.data as ChatMessage[];
+}
+
+export class BotSendError extends Error {
+  // ข้อความของลูกค้าที่เซิร์ฟเวอร์บันทึกไว้แล้ว (มีเมื่อบอทตอบไม่ได้แต่ข้อความถูกบันทึก)
+  savedUserMessage: ChatMessage | null;
+
+  constructor(message: string, savedUserMessage: ChatMessage | null) {
+    super(message);
+    this.savedUserMessage = savedUserMessage;
+  }
+}
+
+export async function sendBotMessage(message: string) {
+  const response = await fetch(`${API_URL}/api/bot/send`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ message }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new BotSendError(
+      result.message || "ส่งข้อความไม่สำเร็จ",
+      result.data?.user_message ?? null
+    );
+  }
+
+  return result.data as { user_message: ChatMessage; bot_message: ChatMessage };
+}
+
+export async function clearBotChat() {
+  const response = await fetch(`${API_URL}/api/bot/my`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "ล้างประวัติแชทไม่สำเร็จ");
+  }
 }
 
 // ฝั่ง admin: รายชื่อบทสนทนาทั้งหมด เรียงตามข้อความล่าสุด

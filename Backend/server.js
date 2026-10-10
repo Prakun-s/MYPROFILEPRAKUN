@@ -10,6 +10,7 @@ const authRouter = require("./src/routes/auth");
 const { authenticateToken, requireRole } = require("./src/middleware/auth");
 const { calculateCoinsWithAI } = require("./src/coinCalculator");
 const { validateDiscountCode, generateVoucherCode } = require("./src/discountEngine");
+const { answerBot, isBotConfigured } = require("./src/chatBot");
 
 const app = express();
 
@@ -72,6 +73,65 @@ app.post(
     }
 
     const url = `${req.protocol}://${req.get("host")}/uploads/avatars/${req.file.filename}`;
+
+    res.json({
+      success: true,
+      url,
+    });
+  }
+);
+
+// =========================
+// อัปโหลดรูปสินค้า (เฉพาะแอดมิน) — เก็บไฟล์จริงไว้ในเครื่อง server แล้ว serve ผ่าน /uploads
+// รูปแบบเดียวกับการอัปโหลดรูปโปรไฟล์ด้านบนทุกอย่าง แค่เปลี่ยนโฟลเดอร์เก็บ
+// =========================
+const PRODUCT_UPLOAD_DIR = path.join(__dirname, "uploads", "products");
+fs.mkdirSync(PRODUCT_UPLOAD_DIR, { recursive: true });
+
+const productImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, PRODUCT_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+    const safeExt = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? ext : ".jpg";
+    cb(null, `product-${req.user.id}-${Date.now()}${safeExt}`);
+  },
+});
+
+const uploadProductImage = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("รองรับเฉพาะไฟล์รูปภาพเท่านั้น"));
+    }
+    cb(null, true);
+  },
+});
+
+app.post(
+  "/api/upload/product",
+  authenticateToken,
+  requireRole("admin"),
+  (req, res, next) => {
+    uploadProductImage.single("image")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || "อัปโหลดรูปไม่สำเร็จ",
+        });
+      }
+      next();
+    });
+  },
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบไฟล์รูปภาพที่อัปโหลด",
+      });
+    }
+
+    const url = `${req.protocol}://${req.get("host")}/uploads/products/${req.file.filename}`;
 
     res.json({
       success: true,
@@ -2119,6 +2179,169 @@ app.post(
     }
   }
 );
+
+// =========================
+// แชทบอท "I AUAN" (ตอบลูกค้าอัตโนมัติแบบจับคำสำคัญ ไม่ใช้ API key) — แยกจากแชทกับแอดมิน คนละตาราง (bot_messages)
+// ต้องรัน Backend/sql/bot_messages.sql ก่อนใช้งาน (ดูตรรกะที่ Backend/src/chatBot.js)
+// =========================
+const BOT_TABLE_MISSING_MESSAGE =
+  "ยังไม่มีตาราง bot_messages ในฐานข้อมูล — กรุณารัน Backend/sql/bot_messages.sql ก่อน";
+
+const BOT_MAX_MESSAGE_CHARS = 1000;
+const BOT_RATE_LIMIT_PER_MINUTE = 8;
+const botRecentSends = new Map(); // userId -> timestamps (ms) ของข้อความที่ส่งในช่วง 1 นาทีล่าสุด
+
+// กันกดรัว/ยิงสคริปต์ เพราะทุกข้อความมีค่าใช้จ่ายในการเรียก AI
+function isBotRateLimited(userId) {
+  const now = Date.now();
+  const recent = (botRecentSends.get(userId) || []).filter((t) => now - t < 60000);
+
+  if (recent.length >= BOT_RATE_LIMIT_PER_MINUTE) {
+    botRecentSends.set(userId, recent);
+    return true;
+  }
+
+  recent.push(now);
+  botRecentSends.set(userId, recent);
+  return false;
+}
+
+// GET ประวัติแชทกับบอทของตัวเอง (200 ข้อความล่าสุด)
+app.get("/api/bot/my", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, role, message, created_at FROM bot_messages WHERE user_id = ? ORDER BY id DESC LIMIT 200",
+      [req.user.id]
+    );
+
+    rows.reverse();
+
+    // แปลงให้อยู่ในรูปแบบเดียวกับ ChatMessage ของแอป (sender_role: user | ai)
+    const data = rows.map((r) => ({
+      id: r.id,
+      user_id: req.user.id,
+      sender_role: r.role === "user" ? "user" : "ai",
+      message: r.message,
+      is_read: 1,
+      created_at: r.created_at,
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error("❌ Get bot chat error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({ success: false, message: BOT_TABLE_MISSING_MESSAGE });
+    }
+
+    res.status(500).json({ success: false, message: "Database error" });
+  }
+});
+
+// POST ส่งข้อความหาบอท — รอจนบอทตอบแล้วคืนทั้งข้อความของลูกค้าและคำตอบของบอท
+app.post("/api/bot/send", authenticateToken, async (req, res) => {
+  try {
+    const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+
+    if (!message) {
+      return res.status(400).json({ success: false, message: "กรุณากรอกข้อความ" });
+    }
+
+    if (message.length > BOT_MAX_MESSAGE_CHARS) {
+      return res.status(400).json({
+        success: false,
+        message: `ข้อความยาวเกินไป (ไม่เกิน ${BOT_MAX_MESSAGE_CHARS} ตัวอักษร)`,
+      });
+    }
+
+    if (!isBotConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message: "I AUAN ปิดใช้งานอยู่ชั่วคราว ลองคุยกับแอดมินแทนได้ที่เมนู \"แชทกับแอดมิน\"",
+      });
+    }
+
+    if (isBotRateLimited(req.user.id)) {
+      return res.status(429).json({
+        success: false,
+        message: "ส่งข้อความถี่เกินไป รอสักครู่แล้วลองใหม่",
+      });
+    }
+
+    const [userInsert] = await pool.query(
+      "INSERT INTO bot_messages (user_id, role, message) VALUES (?, 'user', ?)",
+      [req.user.id, message]
+    );
+
+    const userMessage = {
+      id: userInsert.insertId,
+      user_id: req.user.id,
+      sender_role: "user",
+      message,
+      is_read: 1,
+      created_at: new Date().toISOString(),
+    };
+
+    let reply;
+
+    try {
+      reply = await answerBot(pool, req.user.id);
+    } catch (aiError) {
+      console.error("⚠️ I AUAN reply failed:", aiError.message);
+
+      // ข้อความของลูกค้าถูกบันทึกไว้แล้ว แต่บอทตอบไม่ได้ครั้งนี้
+      return res.status(503).json({
+        success: false,
+        message: "I AUAN ตอบไม่ได้ชั่วคราว ลองใหม่อีกครั้ง หรือคุยกับแอดมินที่เมนู \"แชทกับแอดมิน\"",
+        data: { user_message: userMessage },
+      });
+    }
+
+    const [botInsert] = await pool.query(
+      "INSERT INTO bot_messages (user_id, role, message) VALUES (?, 'bot', ?)",
+      [req.user.id, reply]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        user_message: userMessage,
+        bot_message: {
+          id: botInsert.insertId,
+          user_id: req.user.id,
+          sender_role: "ai",
+          message: reply,
+          is_read: 1,
+          created_at: new Date().toISOString(),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("❌ Send bot message error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({ success: false, message: BOT_TABLE_MISSING_MESSAGE });
+    }
+
+    res.status(500).json({ success: false, message: "Database error" });
+  }
+});
+
+// DELETE ล้างประวัติแชทกับบอทของตัวเอง
+app.delete("/api/bot/my", authenticateToken, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM bot_messages WHERE user_id = ?", [req.user.id]);
+    res.json({ success: true, message: "ล้างประวัติแชทแล้ว" });
+  } catch (error) {
+    console.error("❌ Clear bot chat error:", error);
+
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({ success: false, message: BOT_TABLE_MISSING_MESSAGE });
+    }
+
+    res.status(500).json({ success: false, message: "Database error" });
+  }
+});
 
 // =========================
 // GET เหรียญสะสมของผู้ใช้ที่ login อยู่ (ยอดคงเหลือ + ประวัติการได้เหรียญ)

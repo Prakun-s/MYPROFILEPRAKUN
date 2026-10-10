@@ -20,6 +20,7 @@ import AdminProductsScreen from "../AdminProductsScreen";
 import AdminNavTabs, { AdminTabKey } from "../components/AdminNavTabs";
 import BottomTabBar, { TabKey } from "../components/BottomTabBar";
 import CartScreen, { CartScreenHandle } from "../CartScreen";
+import BotChatScreen from "../BotChatScreen";
 import ChatScreen from "../ChatScreen";
 import ClaimScreen, { ClaimScreenHandle } from "../ClaimScreen";
 import CoinShopScreen from "../CoinShopScreen";
@@ -155,6 +156,7 @@ export default function HomeScreen() {
     | "notifications"
     | "settings"
     | "chat"
+    | "botChat"
     | "adminChatList"
     | "adminChat"
   >("products");
@@ -1107,6 +1109,7 @@ export default function HomeScreen() {
               setScreen("claim");
             }}
             onChat={() => setScreen("chat")}
+            onBotChat={() => setScreen("botChat")}
             onCoins={() => setScreen("coins")}
             onCoinShop={() => setScreen("coinShop")}
             onWishlist={() => setScreen("wishlist")}
@@ -1154,6 +1157,34 @@ export default function HomeScreen() {
 
         <View style={styles.content}>
           <ChatScreen />
+        </View>
+
+      </View>
+    );
+  }
+
+  // หน้าแชทเต็มหน้าจอกับบอท AI "I AUAN" (แยกจากแชทกับแอดมิน) เข้าถึงจากเมนู "แชทกับ I AUAN"
+  if (screen === "botChat") {
+    return (
+      <View style={styles.container}>
+
+        <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+          <View style={styles.headerLeft}>
+            <BackButton onPress={goBack} />
+            <Text style={styles.screenHeaderTitle}>I AUAN</Text>
+          </View>
+
+          <View style={styles.headerRight}>
+            <HeaderAvatarButton
+              username={user?.username}
+              avatarUrl={avatarUrl}
+              onPress={() => setScreen("profile")}
+            />
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <BotChatScreen />
         </View>
 
       </View>

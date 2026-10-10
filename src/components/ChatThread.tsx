@@ -25,6 +25,8 @@ interface Props {
   onSend: (text: string) => Promise<void> | void;
   placeholder?: string;
   emptyText?: string;
+  // ชื่อที่แสดงเหนือฟองข้อความของบอท (ข้อความที่ sender_role = "ai")
+  botName?: string;
 }
 
 function formatTime(iso: string) {
@@ -43,6 +45,7 @@ export default function ChatThread({
   onSend,
   placeholder = "พิมพ์ข้อความ...",
   emptyText = "ยังไม่มีข้อความ เริ่มพิมพ์ทักทายได้เลย",
+  botName = "I AUAN",
 }: Props) {
   const [text, setText] = useState("");
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -89,12 +92,15 @@ export default function ChatThread({
             </View>
           }
           renderItem={({ item }) => {
+            // ข้อความของบอท (sender_role "ai") แสดงเป็นฝั่ง "อีกฝ่าย" พร้อมป้ายชื่อบอท
+            const isAi = item.sender_role === "ai";
             const isMine = item.sender_role === myRole;
 
             return (
               <View
                 style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}
               >
+                {isAi && <Text style={styles.aiLabel}>{botName}</Text>}
                 <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                   <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>
                     {item.message}
@@ -187,6 +193,14 @@ const styles = StyleSheet.create({
   bubbleRowTheirs: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
+  },
+
+  aiLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#8A5416",
+    marginBottom: 3,
+    marginHorizontal: 4,
   },
 
   bubble: {
